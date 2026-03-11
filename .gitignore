@@ -126,3 +126,6 @@ dmypy.json
 # Ignoring Custom Venv and environment files
 primusEnv/
 .env
+
+# FastF1 cache
+.fastf1_cache/
