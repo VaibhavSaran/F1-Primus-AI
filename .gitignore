@@ -129,3 +129,9 @@ primusEnv/
 
 # FastF1 cache
 .fastf1_cache/
+
+# Ignoring mlartifacts folder
+mlartifacts/
+
+# Ignoring mlflow db
+mlflow.db
