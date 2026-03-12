@@ -1,8 +1,9 @@
 """
-Agent Weather Tool
+Agent Weather tool
 Fetches race-weekend weather forecast for a given F1 round.
-Uses Open-Meteo API — free and no API key required.
+Uses Open-Meteo API — completely free, no API key required.
 Automatically uses the correct race weekend dates from config.
+Handles both future forecasts (up to 16 days) and historical data.
 """
 
 from __future__ import annotations
@@ -40,23 +41,26 @@ CIRCUIT_COORDS = {
     "Abu Dhabi":    (24.4672,   54.6031),
 }
 
+# Circuits that hold their race on Saturday
+SATURDAY_RACES = ["Baku", "Las Vegas"]
+
 
 @tool
 def get_weather_forecast(round_number: int) -> dict:
     """
-    Fetch the race-weekend weather forecast for a 2026 F1 round.
-    Automatically uses the correct Friday/Saturday/Sunday dates
-    for that round from the F1 calendar.
+    Fetch the race-weekend weather for a 2026 F1 round.
+    Automatically uses correct Friday/Saturday/Sunday dates.
+    Handles historical data for past races and forecasts
+    for upcoming races (up to 16 days ahead).
 
     Args:
         round_number: Race round number on the 2026 calendar (1-24).
 
     Returns:
-        dict with daily forecasts for Friday (Practice), Saturday
-        (Qualifying) and Sunday (Race) — temperature, precipitation
-        probability, wind speed, and a plain-English race day summary.
+        dict with daily weather for each session, plus a race day
+        summary with strategic implications.
     """
-    # Lookup race info from calendar 
+    # Lookup race info 
     race_info = F1_CALENDAR.get(round_number)
     if not race_info:
         return {"error": f"Round {round_number} not found in 2026 calendar."}
@@ -65,116 +69,183 @@ def get_weather_forecast(round_number: int) -> dict:
 
     coords = CIRCUIT_COORDS.get(location)
     if not coords:
-        return {"error": f"No coordinates found for location: '{location}'."}
+        return {"error": f"No coordinates found for: '{location}'."}
 
-    # Calculate Friday and Saturday from race (Sunday) date 
+    lat, lon = coords
+
+    # Calculate session dates 
     race_date = datetime.strptime(race_date_str, "%Y-%m-%d")
+    today     = datetime.today()
+    days_away = (race_date - today).days
 
-    # Azerbaijan and Las Vegas race on Saturday — adjust accordingly
-    saturday_races = ["Baku", "Las Vegas"]
-    if location in saturday_races:
-        saturday = race_date
+    if location in SATURDAY_RACES:
+        # Race is on Saturday
         friday   = race_date - timedelta(days=1)
-        sunday   = race_date + timedelta(days=1)  # no race, use for forecast completeness
+        saturday = race_date
+        sunday   = race_date + timedelta(days=1)
+        labels   = [
+            "Friday (Practice)",
+            "Saturday (Race)",
+            "Sunday (Post-Race)",
+        ]
     else:
+        # Standard Sunday race weekend
         friday   = race_date - timedelta(days=2)
         saturday = race_date - timedelta(days=1)
         sunday   = race_date
+        labels   = [
+            "Friday (Practice)",
+            "Saturday (Qualifying)",
+            "Sunday (Race)",
+        ]
 
     start_date = friday.strftime("%Y-%m-%d")
     end_date   = sunday.strftime("%Y-%m-%d")
 
-    # Check if date is within Open-Meteo forecast range 
-    today     = datetime.today()
-    days_away = (race_date - today).days
-
+    # Too far ahead for any forecast 
     if days_away > 16:
         return {
-            "circuit":    location,
-            "race":       race_name,
-            "race_date":  race_date_str,
-            "days_away":  days_away,
-            "forecast":   {},
-            "summary":    (
-                f"{race_name} is {days_away} days away — too far ahead for a "
-                f"weather forecast. Open-Meteo forecasts up to 16 days ahead. "
-                f"Re-run this tool closer to the race weekend."
+            "circuit":   location,
+            "race":      race_name,
+            "race_date": race_date_str,
+            "days_away": days_away,
+            "forecast":  {},
+            "is_historical": False,
+            "summary": (
+                f"⏳ {race_name} is {days_away} days away — too far ahead "
+                f"for a weather forecast. Open-Meteo forecasts up to 16 days "
+                f"ahead. Re-run closer to the race weekend."
             ),
         }
 
-    lat, lon = coords
+    # Choose correct API and fields 
+    is_historical = days_away < 0
 
-    # Historical or forecast endpoint
-    if days_away < 0:
-        # Race already happened — use historical archive
-        base_url = "https://archive-api.open-meteo.com/v1/archive"
+    if is_historical:
+        # Past race — use archive API (no precipitation probability)
+        base_url    = "https://archive-api.open-meteo.com/v1/archive"
+        daily_fields = (
+            "temperature_2m_max,"
+            "temperature_2m_min,"
+            "precipitation_sum,"        # actual rainfall in mm
+            "windspeed_10m_max"
+        )
     else:
         # Upcoming race — use forecast API
-        base_url = "https://api.open-meteo.com/v1/forecast"
+        base_url    = "https://api.open-meteo.com/v1/forecast"
+        daily_fields = (
+            "temperature_2m_max,"
+            "temperature_2m_min,"
+            "precipitation_probability_max,"
+            "windspeed_10m_max"
+        )
 
     url = (
         f"{base_url}"
         f"?latitude={lat}&longitude={lon}"
-        f"&daily=temperature_2m_max,temperature_2m_min,"
-        f"precipitation_probability_max,windspeed_10m_max"
+        f"&daily={daily_fields}"
         f"&start_date={start_date}"
         f"&end_date={end_date}"
         f"&timezone=auto"
     )
 
+    # Fetch data 
     try:
         resp = requests.get(url, timeout=10)
         resp.raise_for_status()
         data = resp.json()
 
-        daily  = data["daily"]
-        dates  = daily["time"]
-        t_max  = daily["temperature_2m_max"]
-        t_min  = daily["temperature_2m_min"]
-        rain   = daily["precipitation_probability_max"]
-        wind   = daily["windspeed_10m_max"]
+        daily  = data.get("daily", {})
+        dates  = daily.get("time", [])
+        t_max  = daily.get("temperature_2m_max", [])
+        t_min  = daily.get("temperature_2m_min", [])
+        wind   = daily.get("windspeed_10m_max", [])
 
-        if location in saturday_races:
-            labels = ["Friday (Practice)", "Saturday (Race)", "Sunday (Post-Race)"]
+        # Rain field differs between historical and forecast
+        if is_historical:
+            # precipitation_sum = actual mm of rain that fell
+            rain_raw  = daily.get("precipitation_sum", [0] * len(dates))
+            rain_type = "mm_actual"
         else:
-            labels = ["Friday (Practice)", "Saturday (Qualifying)", "Sunday (Race)"]
+            # precipitation_probability_max = % chance of rain
+            rain_raw  = daily.get("precipitation_probability_max", [0] * len(dates))
+            rain_type = "probability_pct"
 
+        # Build forecast dict 
         forecast = {}
         for i, label in enumerate(labels):
             if i < len(dates):
+                rain_val = rain_raw[i] if rain_raw and i < len(rain_raw) else 0
+                wind_val = wind[i]     if wind     and i < len(wind)     else 0
+                tmax_val = t_max[i]    if t_max    and i < len(t_max)    else None
+                tmin_val = t_min[i]    if t_min    and i < len(t_min)    else None
+
                 forecast[label] = {
-                    "date":                   dates[i],
-                    "temp_max_c":             t_max[i],
-                    "temp_min_c":             t_min[i],
-                    "precipitation_prob_pct": rain[i],
-                    "wind_speed_kmh":         wind[i],
-                    "conditions":             _describe(rain[i], wind[i]),
+                    "date":        dates[i],
+                    "temp_max_c":  tmax_val,
+                    "temp_min_c":  tmin_val,
+                    "wind_speed_kmh": wind_val,
+                    "rain_type":   rain_type,
+                    "rain_value":  rain_val,
+                    "conditions":  _describe(
+                                       rain_val, wind_val,
+                                       is_historical=is_historical
+                                   ),
                 }
 
+                # Keep consistent key name for the agent
+                if is_historical:
+                    forecast[label]["precipitation_mm"]      = rain_val
+                    forecast[label]["precipitation_prob_pct"] = None
+                else:
+                    forecast[label]["precipitation_prob_pct"] = rain_val
+                    forecast[label]["precipitation_mm"]       = None
+
         return {
-            "circuit":   location,
-            "race":      race_name,
-            "country":   country,
-            "race_date": race_date_str,
-            "days_away": days_away,
-            "forecast":  forecast,
-            "summary":   _summarise(forecast, race_name, location, saturday_races),
+            "circuit":        location,
+            "race":           race_name,
+            "country":        country,
+            "race_date":      race_date_str,
+            "days_away":      days_away,
+            "is_historical":  is_historical,
+            "forecast":       forecast,
+            "summary":        _summarise(
+                                  forecast, race_name,
+                                  location, is_historical
+                              ),
         }
 
     except requests.RequestException as exc:
         return {"error": f"Weather API request failed: {exc}"}
 
 
-# helper Functions to convert raw forecast data into plain-English descriptions and summaries 
+# Helper functions
 
-def _describe(rain_prob: float, wind: float) -> str:
+def _describe(rain_val: float, wind: float, is_historical: bool = False) -> str:
+    """Generate a plain-English conditions description."""
+    rain_val = rain_val or 0
+    wind     = wind     or 0
+
     parts = []
-    if rain_prob >= 70:
-        parts.append("high rain risk")
-    elif rain_prob >= 40:
-        parts.append("possible rain")
+
+    if is_historical:
+        # rain_val is actual mm of rainfall
+        if rain_val >= 10:
+            parts.append("heavy rain recorded")
+        elif rain_val >= 2:
+            parts.append("light rain recorded")
+        elif rain_val > 0:
+            parts.append("trace rainfall recorded")
+        else:
+            parts.append("dry conditions")
     else:
-        parts.append("dry conditions expected")
+        # rain_val is probability percentage
+        if rain_val >= 70:
+            parts.append("high rain risk")
+        elif rain_val >= 40:
+            parts.append("possible rain")
+        else:
+            parts.append("dry conditions expected")
 
     if wind >= 40:
         parts.append("strong winds")
@@ -184,22 +255,50 @@ def _describe(rain_prob: float, wind: float) -> str:
     return ", ".join(parts)
 
 
-def _summarise(forecast: dict, race: str, location: str, saturday_races: list) -> str:
-    race_key = "Saturday (Race)" if location in saturday_races else "Sunday (Race)"
+def _summarise(
+    forecast: dict,
+    race: str,
+    location: str,
+    is_historical: bool,
+) -> str:
+    """Generate a race-day weather summary with strategic insight."""
+
+    # Pick the race day key
+    if location in SATURDAY_RACES:
+        race_key = "Saturday (Race)"
+    else:
+        race_key = "Sunday (Race)" if not is_historical else "Sunday (Race)"
+
     race_day = forecast.get(race_key, {})
 
-    rain = race_day.get("precipitation_prob_pct", 0)
-    temp = race_day.get("temp_max_c", "N/A")
-    wind = race_day.get("wind_speed_kmh", 0)
+    temp = race_day.get("temp_max_c") or "N/A"
+    wind = race_day.get("wind_speed_kmh") or 0
 
-    if rain >= 60:
-        outlook = "WET race very likely — expect strategy chaos."
-    elif rain >= 30:
-        outlook = "Mixed conditions possible — teams may split strategies."
+    if is_historical:
+        rain_mm = race_day.get("precipitation_mm") or 0
+        if rain_mm >= 10:
+            outlook = "WET race — significant rainfall was recorded."
+        elif rain_mm >= 2:
+            outlook = "Damp conditions — some rainfall affected the race."
+        elif rain_mm > 0:
+            outlook = "Mostly dry with trace rainfall recorded."
+        else:
+            outlook = "Dry race conditions."
+
+        return (
+            f"Historical weather for {race}: {temp}°C, "
+            f"{rain_mm}mm rainfall, {wind} km/h winds. {outlook}"
+        )
     else:
-        outlook = "Dry race expected — standard strategy likely."
+        rain_prob = race_day.get("precipitation_prob_pct") or 0
+        if rain_prob >= 60:
+            outlook = "WET race very likely — expect strategy chaos."
+        elif rain_prob >= 30:
+            outlook = "Mixed conditions possible — teams may split strategies."
+        else:
+            outlook = "Dry race expected — standard strategy likely."
 
-    return (
-        f"Race day forecast for {race}: {temp}°C, "
-        f"{rain}% rain probability, {wind} km/h winds. {outlook}"
-    )
+        return (
+            f"Race day forecast for {race}: {temp}°C, "
+            f"{rain_prob}% rain probability, {wind} km/h winds. {outlook}"
+        )
