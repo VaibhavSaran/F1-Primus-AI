@@ -23,7 +23,7 @@ from config import (
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 fastf1.Cache.enable_cache(CACHE_DIR)
-mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+# mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 
 def run_prediction(round_number: int, race_name: str) -> dict:
     """
@@ -37,62 +37,68 @@ def run_prediction(round_number: int, race_name: str) -> dict:
     Returns:
         dict with predicted podium, top 10, MAE, and MLflow run ID.
     """
-    mlflow.set_experiment(MLFLOW_EXPERIMENT)
 
-    run_name = f"Round_{round_number}_{race_name.replace(' ', '_')}"
+    # Load training data 
+    print(f"Loading training data for Round {round_number}")
+    train_df = _load_historical_data(round_number)
 
+    if train_df.empty:
+        return {"error": "Could not load sufficient historical training data."}
+
+    # Feature engineering 
+    le      = LabelEncoder()
+    X_train = _build_features(train_df, le, fit=True)
+    y_train = train_df["mean_lap_time"].values
+
+    # Train model 
+    params = {
+        "n_estimators":  200,
+        "learning_rate": 0.05,
+        "max_depth":     4,
+        "random_state":  42,
+    }
+    print(f"Training Gradient Boosting model")
+    model = GradientBoostingRegressor(**params)
+    model.fit(X_train, y_train)
+
+    train_preds = model.predict(X_train)
+    mae         = mean_absolute_error(y_train, train_preds)
+
+    # Generate predictions 
+    print(f"Generating predictions")
+    pred_df = _build_2026_input(round_number)
+    X_pred  = _build_features(pred_df, le, fit=False)
+    predicted_times = model.predict(X_pred)
+
+    pred_df["predicted_time"] = predicted_times
+    results = (
+        pred_df[["driver", "predicted_time"]]
+        .sort_values("predicted_time")
+        .reset_index(drop=True)
+    )
+    results["position"]           = results.index + 1
+    results["predicted_time_fmt"] = results["predicted_time"].apply(_fmt_time)
+    results["gap_to_leader"]      = (
+        results["predicted_time"] - results["predicted_time"].iloc[0]
+    ).round(3)
+
+    podium = (
+        results.head(3)[["position", "driver", "predicted_time_fmt"]]
+        .to_dict("records")
+    )
+    top_10 = (
+        results.head(10)[["position", "driver", "predicted_time_fmt", "gap_to_leader"]]
+        .to_dict("records")
+    )
+
+    # MLflow logging (fully optional) 
+    mlflow_run_id = "unavailable"
     try:
+        mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
         mlflow.set_experiment(MLFLOW_EXPERIMENT)
-    except Exception:
-        pass  # MLflow server unavailable, continue without tracking
+        run_name = f"Round_{round_number}_{race_name.replace(' ', '_')}"
 
-        # Load training data 
-        print(f"Loading training data for Round {round_number}")
-        train_df = _load_historical_data(round_number)
-
-        if train_df.empty:
-            return {"error": "Could not load sufficient historical training data."}
-
-        # Feature engineering 
-        le      = LabelEncoder()
-        X_train = _build_features(train_df, le, fit=True)
-        y_train = train_df["mean_lap_time"].values
-
-        # Train model 
-        params = {
-            "n_estimators":  200,
-            "learning_rate": 0.05,
-            "max_depth":     4,
-            "random_state":  42,
-        }
-        print(f"Training Gradient Boosting model")
-        model = GradientBoostingRegressor(**params)
-        model.fit(X_train, y_train)
-
-        train_preds = model.predict(X_train)
-        mae         = mean_absolute_error(y_train, train_preds)
-
-        # Build 2026 prediction input 
-        print(f"Generating predictions")
-        pred_df = _build_2026_input(round_number)
-        X_pred = _build_features(pred_df, le, fit=False)
-        predicted_times = model.predict(X_pred)
-
-        pred_df["predicted_time"] = predicted_times
-        results = (
-            pred_df[["driver", "predicted_time"]]
-            .sort_values("predicted_time")
-            .reset_index(drop=True)
-        )
-        results["position"]          = results.index + 1
-        results["predicted_time_fmt"] = results["predicted_time"].apply(_fmt_time)
-        results["gap_to_leader"]      = (
-            results["predicted_time"] - results["predicted_time"].iloc[0]
-        ).round(3)
-
-        # Log to MLflow (optional — skips if server unavailable)
-        try:
-            print(f"Logging to MLflow")
+        with mlflow.start_run(run_name=run_name) as run:
             mlflow.log_params(params)
             mlflow.log_param("round_number", round_number)
             mlflow.log_param("race_name", race_name)
@@ -100,34 +106,28 @@ def run_prediction(round_number: int, race_name: str) -> dict:
             mlflow.log_metric("train_mae_seconds", round(mae, 4))
             mlflow.sklearn.log_model(model, "gradient_boosting_model")
 
-            results_path = os.path.join(tempfile.gettempdir(), f"predictions_round_{round_number}.csv")
+            results_path = os.path.join(
+                tempfile.gettempdir(),
+                f"predictions_round_{round_number}.csv"
+            )
             results.to_csv(results_path, index=False)
             mlflow.log_artifact(results_path)
-            print(f" MAE: {mae:.3f}s | MLflow Run: {run.info.run_id[:8]}")
-        except Exception as e:
-            print(f" MAE: {mae:.3f}s | MLflow unavailable — skipping tracking")
+            mlflow_run_id = run.info.run_id
+            print(f" MAE: {mae:.3f}s | MLflow Run: {mlflow_run_id[:8]}")
 
-        # Build return payload 
-        podium = (
-            results.head(3)[["position", "driver", "predicted_time_fmt"]]
-            .to_dict("records")
-        )
-        top_10 = (
-            results.head(10)[["position", "driver", "predicted_time_fmt", "gap_to_leader"]]
-            .to_dict("records")
-        )
+    except Exception:
+        print(f" MAE: {mae:.3f}s | MLflow unavailable — skipping tracking")
 
-        print(f" MAE: {mae:.3f}s | MLflow Run: {run.info.run_id[:8]}")
-
-        return {
-            "round":        round_number,
-            "race_name":    race_name,
-            "podium":       podium,
-            "top_10":       top_10,
-            "model_mae_s":  round(mae, 3),
-            "mlflow_run_id": run.info.run_id,
-            "summary":      _summarise(race_name, podium, mae),
-        }
+    # Return results 
+    return {
+        "round":         round_number,
+        "race_name":     race_name,
+        "podium":        podium,
+        "top_10":        top_10,
+        "model_mae_s":   round(mae, 3),
+        "mlflow_run_id": mlflow_run_id,
+        "summary":       _summarise(race_name, podium, mae),
+    }
 
 
 # Data loaders 
