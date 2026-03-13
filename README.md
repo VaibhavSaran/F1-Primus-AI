@@ -132,3 +132,4 @@ Once secrets are set, every push to `main` auto-deploys.
 
 *Generated reports powered by LangGraph & Claude AI*
 *ML Tracking: MLflow | Data: FastF1 & Open-Meteo | News: Tavily*
+*Idea and Credits: https://github.com/mar-antaya/2025_f1_predictions*
