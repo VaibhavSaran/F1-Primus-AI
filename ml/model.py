@@ -41,7 +41,10 @@ def run_prediction(round_number: int, race_name: str) -> dict:
 
     run_name = f"Round_{round_number}_{race_name.replace(' ', '_')}"
 
-    with mlflow.start_run(run_name=run_name) as run:
+    try:
+        mlflow.set_experiment(MLFLOW_EXPERIMENT)
+    except Exception:
+        pass  # MLflow server unavailable, continue without tracking
 
         # Load training data 
         print(f"Loading training data for Round {round_number}")
@@ -87,19 +90,22 @@ def run_prediction(round_number: int, race_name: str) -> dict:
             results["predicted_time"] - results["predicted_time"].iloc[0]
         ).round(3)
 
-        # Log to MLflow 
-        print(f"Logging to MLflow")
-        mlflow.log_params(params)
-        mlflow.log_param("round_number", round_number)
-        mlflow.log_param("race_name", race_name)
-        mlflow.log_param("season", CURRENT_SEASON)
-        mlflow.log_metric("train_mae_seconds", round(mae, 4))
-        mlflow.sklearn.log_model(model, "gradient_boosting_model")
+        # Log to MLflow (optional — skips if server unavailable)
+        try:
+            print(f"Logging to MLflow")
+            mlflow.log_params(params)
+            mlflow.log_param("round_number", round_number)
+            mlflow.log_param("race_name", race_name)
+            mlflow.log_param("season", CURRENT_SEASON)
+            mlflow.log_metric("train_mae_seconds", round(mae, 4))
+            mlflow.sklearn.log_model(model, "gradient_boosting_model")
 
-        # Save predictions CSV as artifact
-        results_path = os.path.join(tempfile.gettempdir(), f"predictions_round_{round_number}.csv")
-        results.to_csv(results_path, index=False)
-        mlflow.log_artifact(results_path)
+            results_path = os.path.join(tempfile.gettempdir(), f"predictions_round_{round_number}.csv")
+            results.to_csv(results_path, index=False)
+            mlflow.log_artifact(results_path)
+            print(f" MAE: {mae:.3f}s | MLflow Run: {run.info.run_id[:8]}")
+        except Exception as e:
+            print(f" MAE: {mae:.3f}s | MLflow unavailable — skipping tracking")
 
         # Build return payload 
         podium = (
