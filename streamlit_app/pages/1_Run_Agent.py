@@ -36,8 +36,42 @@ st.markdown(f"""
 st.divider()
 
 if st.button("Run Analysis"):
-    with st.spinner(f"Running pipeline for {race_name}... this takes 2-3 minutes."):
-        result = run_pre_race_agent(round_number=selected_round)
+    progress = st.progress(0, text="Starting pipeline...")
+    status   = st.empty()
+
+    status.info("⏳ Fetching weather data...")
+    progress.progress(10)
+
+    import threading
+    result_container = {}
+
+    def run_agent():
+        result_container["result"] = run_pre_race_agent(round_number=selected_round)
+
+    thread = threading.Thread(target=run_agent)
+    thread.start()
+
+    import time
+    steps = [
+        (25,  "⏳ Loading FP2 practice data..."),
+        (50,  "⏳ Searching news and penalties..."),
+        (70,  "⏳ Running ML prediction model..."),
+        (85,  "⏳ Claude is writing the report..."),
+    ]
+    step_interval = 30  # seconds between fake progress updates
+
+    for i, (pct, msg) in enumerate(steps):
+        thread.join(timeout=step_interval)
+        if not thread.is_alive():
+            break
+        progress.progress(pct, text=msg)
+        status.info(msg)
+
+    thread.join()  # wait for full completion
+    progress.progress(100, text="✅ Complete!")
+    status.empty()
+
+    result = result_container.get("result", {})
 
     if "error" in result:
         st.error(f"Pipeline failed: {result['error']}")
@@ -46,7 +80,6 @@ if st.button("Run Analysis"):
         st.divider()
         st.markdown(result["report"])
 
-        # Save report to disk
         from pathlib import Path
         import json
         from datetime import datetime
@@ -54,12 +87,11 @@ if st.button("Run Analysis"):
         reports_dir = Path("data/reports")
         reports_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"Round_{selected_round}_{race_name.replace(' ', '_')}_{timestamp}"
+        filename  = f"Round_{selected_round}_{race_name.replace(' ', '_')}_{timestamp}"
 
         (reports_dir / f"{filename}.md").write_text(result["report"], encoding="utf-8")
         (reports_dir / f"{filename}_tools.json").write_text(
             json.dumps(result["tool_outputs"], indent=2, default=str),
             encoding="utf-8"
         )
-
         st.caption(f"Report saved to data/reports/{filename}.md")
