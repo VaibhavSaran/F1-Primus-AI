@@ -1,0 +1,5 @@
+# Runtime dependencies remain pinned in requirements.txt.
+-r requirements.txt
+pytest==8.4.2
+# The only pytest dependency absent from the production pins.
+iniconfig==2.3.1

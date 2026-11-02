@@ -1,0 +1,17 @@
+[theme]
+base = "dark"
+primaryColor = "#FF554A"
+backgroundColor = "#0C1016"
+secondaryBackgroundColor = "#151B24"
+textColor = "#F2F5F8"
+borderColor = "#293241"
+font = "sans-serif"
+baseRadius = "medium"
+
+[server]
+address = "localhost"
+enableXsrfProtection = true
+enableCORS = true
+
+[browser]
+gatherUsageStats = false

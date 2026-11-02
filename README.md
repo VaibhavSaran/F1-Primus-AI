@@ -1,135 +1,123 @@
-# 🏎️ F1 Primus AI
+# Primus AI — Formula 1 analytics
 
-Autonomous pre-race prediction pipeline for the 2026 F1 season.
-Built with LangGraph, LangChain, Claude AI, MLflow & Streamlit.
+Primus AI is a personal data science and software engineering project for exploring
+Formula 1 weekends, replaying recorded telemetry, comparing pre-race models and
+asking evidence-based F1 questions. A Streamlit interface connects local SQLite
+catalogues, versioned Parquet data, model artifacts and sourced answers.
 
----
+## Features
 
-## What It Does
+- Ask **Primus AI** an F1 question with optional race/session context; inspect
+  internal-data references or cited web sources.
+- Browse results and compare drivers, laps, sectors, throttle and braking.
+- Replay recorded positions alongside timing observations, weather and race events.
+- Explore observed tyre stints, pit visits and weather with explicit missing data.
+- Compare qualifying/form baselines, Ridge, Random Forest, Gradient Boosting,
+  XGBoost and TabFM using chronological evaluation and saved forecasts.
+- Track forecast outcomes and download session analysis or saved chat transcripts.
 
-For any 2026 F1 race, the pipeline automatically:
-1. Fetches race weekend weather (historical or forecast)
-2. Analyses FP2 practice session data via FastF1
-3. Searches for grid penalties and team news via Tavily
-4. Runs a Gradient Boosting ML model to predict race times
-5. Generates a full pre-race report using Claude as the AI brain
+This is an independent research project, not an official Formula 1 service.
+Ranking scores are not calibrated winning odds. The
+[evaluation report](docs/evaluation-results.md) explains results and limitations;
+retrospective research scores do not establish live accuracy.
 
----
+## Start locally
 
-## Tech Stack
+Use Python **3.12.10** and a project environment named `primusEnv`.
+For an existing installation:
 
-| Layer | Technology |
-|---|---|
-| Agent Orchestration | LangGraph |
-| LLM | Claude (claude-sonnet-4-5) |
-| F1 Data | FastF1 |
-| Weather | Open-Meteo |
-| News | Tavily |
-| ML Model | Gradient Boosting (scikit-learn) |
-| ML Tracking | MLflow |
-| Pipeline Scheduling | Prefect |
-| UI | Streamlit |
-| Deployment | GCP Cloud Run |
-
----
-
-## Project Structure
-```
-f1-primus-ai/
-├── agents/
-│   ├── graph.py                  # LangGraph orchestrator
-│   ├── prompts/race_analyst.py   # System prompts
-│   └── tools/                    # 4 LangChain tools
-├── ml/model.py                   # ML model + MLflow
-├── flows/pre_race_pipeline.py    # Prefect flow
-├── streamlit_app/                # UI
-├── docker/                       # Dockerfile + Compose
-├── .github/workflows/deploy.yml  # CI/CD
-└── config.py                     # Season config + calendar
+```powershell
+& '.\primusEnv\Scripts\python.exe' -m pip install -r requirements-dev.txt
+& '.\primusEnv\Scripts\python.exe' -m streamlit run streamlit_app/app.py
 ```
 
----
+For a fresh checkout, create `primusEnv` with an installed Python 3.12.10
+interpreter first. See [environment setup](ENVIRONMENT.md) for Windows setup and
+optional foundation dependencies. Do not copy another machine's environment.
 
-## Quickstart
+The app binds to localhost. The repository **does not include downloaded archives,
+model checkpoints or private chat/forecast stores**. Follow the
+[notebook guide](notebooks/README.md) to collect data locally. An empty checkout
+shows unavailable data rather than fabricated results. Telemetry browsing needs
+no LLM key. Claude and provider downloads require separate local configuration;
+never commit account details or `.env` files.
 
-### 1. Clone and install
-```bash
-git clone https://github.com/YOUR_USERNAME/f1-primus-ai.git
-cd f1-primus-ai
-pip install -r requirements.txt
+## Project structure
+
+```text
+F1-Primus-AI/
+├── .github/workflows/          # Automated verification
+├── .streamlit/                # Local Streamlit configuration
+├── agents/                    # F1 chat, evidence tools and conversation history
+├── data/
+│   ├── archive/               # Collection, normalized storage, audits and exports
+│   └── ...                    # Session, snapshot, replay and weather contracts
+├── flows/                     # Forecast orchestration, reports and tracking
+├── ml/                        # Features, baselines, models and evaluation
+├── monitoring/                # Forecast/outcome history and query projections
+├── security/                  # Access control and request/spending limits
+├── streamlit_app/
+│   ├── components/            # Selectors, tables and replay component
+│   ├── app.py                 # Navigation and application entry point
+│   ├── screens.py             # User-facing pages
+│   └── services.py            # UI-to-data/model service boundary
+├── notebooks/
+│   └── collection_2020_2026/  # Setup, yearly F1/weather and validation notebooks
+├── scripts/                   # Repository checks and tracker generation
+├── tests/                     # Offline regression and UI tests
+├── docs/
+│   ├── features/              # One guide per feature
+│   ├── architecture.md        # Mermaid architecture and request flows
+│   ├── project-walkthrough.md # Completed-race and Mexico examples
+│   ├── evaluation-results.md  # Results, evidence and limitations
+│   └── data-tracker.md        # Dated aggregate collection status
+├── docker/                    # Container scaffolding; remote release gates remain
+├── CONTRIBUTING.md            # Issues, branches, checks and pull requests
+├── REFERENCES.md              # Sources, authors and acknowledgements
+├── SECURITY.md                # Secret handling and safe publication
+├── ENVIRONMENT.md             # Runtime setup and recovery
+├── LICENSE.md                 # Project code licence
+└── requirements*.txt          # Runtime, development and optional packages
 ```
 
-### 2. Set up environment
-```bash
-cp .env.example .env
-# Fill in your API keys in .env
-```
+Private working directories, environments, caches, downloaded data and credentials
+are intentionally excluded from this tree and from version control.
 
-### 3. Start MLflow server
-```bash
-mlflow server --port 5001 --workers 1
-```
+## Documentation and evidence
 
-### 4. Run the Streamlit UI
-```bash
-streamlit run streamlit_app/app.py
-```
+- [Documentation index](docs/README.md), [full walkthrough](docs/project-walkthrough.md)
+  and [architecture](docs/architecture.md).
+- [Model/test results](docs/evaluation-results.md), [data tracker](docs/data-tracker.md)
+  and [collection/update calendar](docs/data-refresh-calendar.md).
+- [Dataset export format](docs/dataset-release.md) and
+  [Kaggle release guide](docs/kaggle-release.md); publication is a separate review step.
 
-### 5. Or run via Prefect flow
-```bash
-# Specific round
-python -m flows.pre_race_pipeline --round 2
+## Contributing
 
-# Auto-detect next race
-python -m flows.pre_race_pipeline
-```
+Open an issue with reproduction steps, expected/actual behaviour and a sanitized
+screenshot or error. Do not attach secrets, session tokens, private chat logs or
+an entire archive. Create a separate branch for each change, run relevant checks,
+and open a PR against the maintainer-designated development branch. Include the
+linked issue, behaviour change, tests and UI evidence. Do not push directly to
+`main`. See [CONTRIBUTING.md](CONTRIBUTING.md) for the complete workflow.
 
----
+## References and acknowledgements
 
-## API Keys Required
+- **[Tom Shaw (@IAmTomShaw)](https://github.com/IAmTomShaw)** —
+  [f1-race-replay](https://github.com/IAmTomShaw/f1-race-replay), for visualization ideas.
+- **[Mariana Antaya (@mar-antaya)](https://github.com/mar-antaya)** —
+  [2025_f1_predictions](https://github.com/mar-antaya/2025_f1_predictions) and
+  [2026_f1_predictions](https://github.com/mar-antaya/2026_f1_predictions), for
+  weekend-data prediction research.
 
-| Key | Where to get |
-|---|---|
-| `ANTHROPIC_API_KEY` | console.anthropic.com |
-| `TAVILY_API_KEY` | app.tavily.com |
-| `GEMINI_API_KEY` | aistudio.google.com |
+Data and tooling include [FastF1](https://docs.fastf1.dev/),
+[Jolpica F1](https://github.com/jolpica/jolpica-f1), [Open-Meteo](https://open-meteo.com/),
+[Google Research TabFM](https://github.com/google-research/tabfm),
+[XGBoost](https://xgboost.readthedocs.io/), [scikit-learn](https://scikit-learn.org/),
+[PyTorch](https://pytorch.org/), [Streamlit](https://streamlit.io/),
+[Plotly](https://plotly.com/python/) and [Anthropic](https://docs.anthropic.com/).
+See [REFERENCES.md](REFERENCES.md) for attribution and research context.
 
----
-
-## Run with Docker
-```bash
-# Build and start all services
-docker-compose -f docker/docker-compose.yml up --build
-
-# App runs at http://localhost:8501
-# MLflow runs at http://localhost:5001
-```
-
----
-
-## Deploy to GCP Cloud Run
-
-### GitHub Secrets Required
-| Secret | Value |
-|---|---|
-| `GCP_PROJECT_ID` | Your GCP project ID |
-| `GCP_SA_KEY` | Service account JSON key |
-| `ANTHROPIC_API_KEY` | Your Anthropic key |
-| `TAVILY_API_KEY` | Your Tavily key |
-| `GEMINI_API_KEY` | Your Gemini key |
-
-Once secrets are set, every push to `main` auto-deploys.
-
----
-
-## Known Limitations
-
-- ML model trained on a single 2025 race — predictions need improvement
-- Weather forecasts limited to 16 days ahead (Open-Meteo limit)
-- STR and PER missing from 2026 FP2 data — estimated from slowest driver pace
-
----
-
-*Generated reports powered by LangGraph & Claude AI*
-*ML Tracking: MLflow | Data: FastF1 & Open-Meteo | News: Tavily*
-*Idea and Credits: https://github.com/mar-antaya/2025_f1_predictions*
+Project code follows [LICENSE.md](LICENSE.md). Upstream code, checkpoints, datasets
+and articles retain their own terms; the project licence does not grant permission
+to redistribute third-party data.

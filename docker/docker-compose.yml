@@ -1,33 +1,40 @@
-version: "3.9"
-
 services:
   app:
     build:
       context: ..
       dockerfile: docker/Dockerfile.app
     ports:
-      - "8501:8501"
+      - "127.0.0.1:8501:8501"
     env_file:
       - ../.env
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5001
+      # Container binds all container interfaces, so guarded local actions stay
+      # disabled until a verified gateway identity is integrated.
+      F1_ACCESS_MODE: disabled
     volumes:
       - ../data:/app/data
       - ../.fastf1_cache:/app/.fastf1_cache
+      - ../.local:/app/.local
     depends_on:
       - mlflow
     restart: unless-stopped
 
   mlflow:
-    image: python:3.11-slim
+    image: python:3.10.20-slim
     working_dir: /mlflow
     command: >
-      bash -c "pip install mlflow --quiet &&
-               mlflow server
-               --host 0.0.0.0
-               --port 5001
-               --workers 1"
+      sh -c "pip install mlflow==3.10.1 --quiet &&
+             mlflow server --host 0.0.0.0 --port 5001 --workers 1
+             --backend-store-uri sqlite:////mlflow/state/mlflow.db
+             --artifacts-destination /mlflow/artifacts --serve-artifacts"
     ports:
-      - "5001:5001"
+      - "127.0.0.1:5001:5001"
     volumes:
-      - ../mlruns:/mlflow/mlruns
-      - ../mlflow-artifacts:/mlflow/mlflow-artifacts
+      - mlflow-state:/mlflow/state
+      - mlflow-artifacts:/mlflow/artifacts
     restart: unless-stopped
+
+volumes:
+  mlflow-state:
+  mlflow-artifacts:

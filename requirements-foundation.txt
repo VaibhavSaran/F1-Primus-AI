@@ -1,0 +1,18 @@
+# Optional CPU research dependencies; install with -c requirements.txt so existing
+# app pins cannot change. Official TabFM source is revision-pinned separately in
+# docs/foundation-models.md; the Python 3.12 migration satisfies its >=3.11 floor.
+timesfm[torch]==3.0.2
+torch==2.10.0
+huggingface-hub==0.36.2
+safetensors==0.7.0
+absl-py==2.4.0
+jaxtyping==0.2.38
+typeguard==2.13.3
+filelock==4.1.0
+networkx==3.4.2
+sympy==1.14.0
+mpmath==1.3.0
+tqdm==4.70.1
+wadler-lindig==0.1.8
+# Torch requires setuptools on Python 3.12+, where venv no longer supplies it.
+setuptools==84.2.1; python_version >= "3.12"

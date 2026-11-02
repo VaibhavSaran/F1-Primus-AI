@@ -135,3 +135,38 @@ mlartifacts/
 
 # Ignoring mlflow db
 mlflow.db
+# Local immutable snapshots, models, jobs and tracking
+.local/
+.scratch/
+graphify-out/
+mlruns/
+mlflow-artifacts/
+/data/raw/
+/data/processed/
+/data/reports/
+
+# Private runtime inputs and artifacts (including nested environments).
+/test.py
+.env*
+!.env.example
+.streamlit/secrets.toml
+secrets.toml
+*.pem
+*.key
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+*.parquet
+*.safetensors
+*.pt
+*.pth
+*.pkl
+*.pickle
+*.joblib
+*.bin
+*.ckpt
+*.onnx
+*.npz
+*.npy
+*.arrow
+*.feather
