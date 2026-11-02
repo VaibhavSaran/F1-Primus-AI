@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'none'; img-src 'none'; object-src 'none'">
+<title>Historical race replay</title><link rel="stylesheet" href="replay.css"></head>
+<body><main aria-label="Historical race replay">
+<p id="state" role="status">Loading recorded session…</p>
+<div class="controls"><button id="back" aria-label="Seek back ten seconds">−10 s</button><button id="play">Play</button>
+<button id="forward" aria-label="Seek forward ten seconds">+10 s</button>
+<label>Speed <select id="speed"><option value="1">1×</option><option value="5">5×</option><option value="10">10×</option><option value="30">30×</option></select></label>
+<output id="clock" aria-label="Browser session clock">0.000 s</output></div>
+<label class="seek">Session clock <input id="seek" type="range" min="0" max="0" value="0" step="100" aria-label="Browser session clock seek"></label>
+<div class="weather" aria-label="Weather at playback time">
+<div><span>Air</span><strong id="weather-air">Unknown</strong></div>
+<div><span>Track</span><strong id="weather-track">Unknown</strong></div>
+<div><span>Humidity</span><strong id="weather-humidity">Unknown</strong></div>
+<div><span>Pressure</span><strong id="weather-pressure">Unknown</strong></div>
+<div><span>Wind</span><strong id="weather-wind">Unknown</strong></div>
+<div><span>Rain</span><strong id="weather-rain">Unknown</strong></div>
+</div><p id="weather-note" class="muted" role="status"></p>
+<p id="marker" class="event" role="status"></p>
+<div class="workspace"><section><h2>Recorded circuit paths</h2><canvas id="track" width="640" height="320" aria-label="Recorded coordinate markers at browser clock"></canvas><p id="track-note" class="muted"></p></section>
+<section><h2 id="tower-title">Session lap completion</h2><p id="tower-note" class="muted"></p>
+<div class="standings"><table><thead><tr id="tower-head"></tr></thead><tbody id="tower"></tbody></table></div></section></div>
+</main><script src="clock.js"></script><script src="replay.js"></script></body></html>

@@ -1,150 +1,77 @@
-"""
-Prefect Pre Race Pipeline
-Prefect flow — schedules and orchestrates the F1 Primus AI
-pre-race pipeline. Runs the full LangGraph agent for a given
-round and saves the report to disk.
-"""
-
+"""Explicit-input forecast pipeline and optional Prefect scheduling wrapper."""
 from __future__ import annotations
-import os
+import argparse
 import json
-from datetime import datetime, timedelta
 from pathlib import Path
-
-from prefect import flow, task, get_run_logger
-
+import os
+import tempfile
 from agents.graph import run_pre_race_agent
-from config import F1_CALENDAR
+from data.contracts import PredictionRequest
+from data.snapshots import load_snapshot
+
+REPORTS_DIR=Path('.local/reports')
 
 
-# Output directory 
-REPORTS_DIR = Path("data") / "reports"
-REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+def save_report(result: dict, *, directory=REPORTS_DIR) -> Path:
+    """Publish one canonical JSON bundle; all display/export formats derive from it."""
+    import re
+    run_id=result.get('run_id','')
+    if not re.fullmatch(r'forecast-[0-9a-f]{32}',run_id):
+        raise ValueError('generated forecast run_id required')
+    # Output location is excluded from the immutable result's content.
+    payload={key:value for key,value in result.items() if key!='report_path'}
+    encoded=json.dumps(payload,sort_keys=True,indent=2,allow_nan=False)
+    root=Path(directory);root.mkdir(parents=True,exist_ok=True)
+    target=root/f'{run_id}.json'
+    if target.exists():
+        if json.loads(target.read_text(encoding='utf-8'))!=payload:
+            raise ValueError('immutable report conflict')
+        return target
+    handle,temporary=tempfile.mkstemp(prefix='.report-',suffix='.tmp',dir=root)
+    try:
+        with os.fdopen(handle,'w',encoding='utf-8') as stream:
+            stream.write(encoded);stream.flush();os.fsync(stream.fileno())
+        # Do not overwrite a prior immutable report on concurrent requests.
+        if os.name=='nt': os.rename(temporary,target)
+        else: os.link(temporary,target)
+    except FileExistsError:
+        if json.loads(target.read_text(encoding='utf-8'))!=payload:
+            raise ValueError('immutable report conflict')
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+    return target
 
 
-# Tasks 
-
-@task(name="validate-round", retries=1)
-def validate_round(round_number: int) -> dict:
-    """Confirm the round exists in the 2026 calendar."""
-    logger = get_run_logger()
-    race_info = F1_CALENDAR.get(round_number)
-    if not race_info:
-        raise ValueError(f"Round {round_number} not found in 2026 calendar.")
-    race_name, location, country, race_date = race_info
-    logger.info(f"Validated: Round {round_number} — {race_name} @ {location}")
-    return {
-        "round_number": round_number,
-        "race_name":    race_name,
-        "location":     location,
-        "country":      country,
-        "race_date":    race_date,
-    }
+def pre_race_pipeline(round_number=None, *, request=None,snapshot=None,reports_dir=REPORTS_DIR,**options):
+    result=run_pre_race_agent(round_number=round_number,request=request,snapshot=snapshot,**options)
+    return dict(result,report_path=str(save_report(result,directory=reports_dir)))
 
 
-@task(name="run-agent", retries=1, retry_delay_seconds=30)
-def run_agent(round_info: dict) -> dict:
-    """Run the full LangGraph agent pipeline for the round."""
-    logger = get_run_logger()
-    round_number = round_info["round_number"]
-    race_name    = round_info["race_name"]
-
-    logger.info(f"Starting agent for {race_name} (Round {round_number})")
-    result = run_pre_race_agent(round_number=round_number)
-
-    if "error" in result:
-        raise RuntimeError(f"Agent failed: {result['error']}")
-
-    logger.info(f"Agent complete — {result['message_count']} messages exchanged")
-    return result
+def prefect_pre_race_pipeline(**kwargs):
+    """Create the installed Prefect flow only when scheduling is explicitly requested."""
+    from prefect import flow
+    return flow(name='f1-pre-race-pipeline',retries=0)(pre_race_pipeline)(**kwargs)
 
 
-@task(name="save-report")
-def save_report(result: dict) -> Path:
-    """Save the final report and tool outputs to disk."""
-    logger     = get_run_logger()
-    race_name  = result["race_name"].replace(" ", "_")
-    timestamp  = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename   = f"Round_{result['round']}_{race_name}_{timestamp}"
-
-    # Save markdown report
-    report_path = REPORTS_DIR / f"{filename}.md"
-    report_path.write_text(result["report"], encoding="utf-8")
-
-    # Save raw tool outputs as JSON
-    json_path = REPORTS_DIR / f"{filename}_tools.json"
-    json_path.write_text(
-        json.dumps(result["tool_outputs"], indent=2, default=str),
-        encoding="utf-8"
-    )
-
-    logger.info(f"Report saved: {report_path}")
-    logger.info(f"Tool data saved: {json_path}")
-    return report_path
+def main(argv=None):
+    parser=argparse.ArgumentParser(description='Run a forecast from an operator-controlled saved snapshot')
+    parser.add_argument('--snapshot',required=True,help='Trusted saved snapshot JSON, never a user upload')
+    parser.add_argument('--model',choices=['grid','rolling_form','ridge','random_forest','gradient_boosting'],default='rolling_form')
+    parser.add_argument('--artifact-id',help='Generated fitted artifact ID in .local/models')
+    parser.add_argument('--prefect',action='store_true',help='Explicitly run through Prefect')
+    args=parser.parse_args(argv)
+    snapshot=load_snapshot(args.snapshot)
+    request=PredictionRequest(snapshot.event,snapshot.payloads['mode'],snapshot.as_of_utc)
+    artifact=None
+    if args.artifact_id:
+        from ml.artifacts import ArtifactStore
+        artifact=ArtifactStore('.local/models').load(args.artifact_id)
+    from monitoring.store import TrackingStore
+    options=dict(request=request,snapshot=snapshot,schedule=snapshot.payloads.get('schedule'),
+                 model_id=args.model,artifact=artifact,owner_id='local',store=TrackingStore('.local/tracking.sqlite3'))
+    runner=prefect_pre_race_pipeline if args.prefect else pre_race_pipeline
+    result=runner(**options)
+    print(json.dumps({'run_id':result['run_id'],'status':result['status'],'report_path':result['report_path']},indent=2))
 
 
-# Main Flow 
-
-@flow(
-    name="f1-pre-race-pipeline",
-    description="Autonomous pre-race intelligence pipeline for F1 2026",
-)
-def pre_race_pipeline(round_number: int) -> dict:
-    """
-    Full pre-race pipeline for a single F1 round.
-
-    Args:
-        round_number: 2026 F1 calendar round (1-24).
-
-    Returns:
-        dict with report path and metadata.
-    """
-    logger = get_run_logger()
-    logger.info(f"F1 Primus AI pipeline starting — Round {round_number}")
-
-    race_info   = validate_round(round_number)
-    result      = run_agent(race_info)
-    report_path = save_report(result)
-
-    logger.info(f"Pipeline complete for {race_info['race_name']}")
-
-    return {
-        "round":       round_number,
-        "race_name":   race_info["race_name"],
-        "report_path": str(report_path),
-        "messages":    result["message_count"],
-        "status":      "success",
-    }
-
-
-# Auto-schedule helper 
-
-def get_next_race_round() -> int | None:
-    """Return the round number of the next upcoming race."""
-    today = datetime.today().date()
-    for round_num, (name, location, country, date_str) in F1_CALENDAR.items():
-        race_date = datetime.strptime(date_str, "%Y-%m-%d").date()
-        if race_date >= today:
-            return round_num
-    return None
-
-
-# Entry point 
-
-if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(description="F1 Primus AI — Pre-race pipeline")
-    parser.add_argument(
-        "--round", type=int, default=None,
-        help="Round number to analyse (default: next upcoming race)"
-    )
-    args = parser.parse_args()
-
-    round_number = args.round or get_next_race_round()
-
-    if round_number is None:
-        print("No upcoming races found in the 2026 calendar.")
-    else:
-        result = pre_race_pipeline(round_number=round_number)
-        print(f"\nDone — report saved to: {result['report_path']}")
+if __name__=='__main__': main()
