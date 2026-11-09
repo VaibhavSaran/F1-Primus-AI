@@ -11,20 +11,25 @@ import sqlite3
 
 ROOT = Path(__file__).resolve().parents[1]
 LOCAL = ROOT / ".local"
+
 MODELS = {"grid": "Grid baseline", "qualifying": "Qualifying baseline", "rolling_form": "Rolling form", "ridge": "Ridge",
           "random_forest": "Random forest", "gradient_boosting": "Gradient boosting",'xgboost':'XGBoost'}
 MODELS.update(weekend_form='Weekend form · qualifying, practice & sprint',
               tabfm='TabFM · tabular research')
 
 
+def release_root():
+    return Path(os.environ.get('F1_SERVING_RELEASE_ROOT', LOCAL)).resolve()
+
+
 def calendar():
     from data.catalog import load_calendar
-    return load_calendar(LOCAL / 'catalog' / 'calendar.json')
+    return load_calendar(release_root() / 'catalog' / 'calendar.json')
 
 
 def session_inventory():
     records = {}
-    for path in local_files(LOCAL / 'sessions', 'session-*.json')[:64]:
+    for path in local_files(release_root() / 'sessions', 'session-*.json')[:64]:
         try:
             if path.stat().st_size > 50_000_000:
                 continue
@@ -59,7 +64,7 @@ def local_files(directory, pattern):
 def snapshots():
     from data.snapshots import load_snapshot
     records, errors = [], 0
-    manifest = LOCAL / 'archive_ml' / 'manifest.json'
+    manifest = release_root() / 'archive_ml' / 'manifest.json'
     active = None
     if manifest.is_file():
         try:
@@ -67,7 +72,7 @@ def snapshots():
         except (OSError, ValueError, KeyError, TypeError):
             active = set()
             errors += 1
-    for path in local_files(LOCAL / "snapshots", "*.json"):
+    for path in local_files(release_root() / "snapshots", "*.json"):
         try:
             snapshot = load_snapshot(path)
             if active is None or not snapshot.snapshot_id.startswith('archive-') or snapshot.snapshot_id in active:
@@ -77,9 +82,23 @@ def snapshots():
     return records, errors
 
 
+def release_reference(value, directory):
+    """Resolve a portable release reference or an existing local absolute path."""
+    root = (release_root() / directory).resolve()
+    path = Path(value)
+    if path.is_absolute():
+        if release_root() != LOCAL.resolve():
+            raise ValueError('Hosted release references must be relative')
+    else:
+        path = release_root() / path
+    if path.is_symlink() or path.resolve().parent != root:
+        raise ValueError('Untrusted release reference')
+    return path
+
+
 def snapshots_for_event(context):
     """Use the frozen index so a page never reloads every race's feature history."""
-    manifest = LOCAL / 'archive_ml' / 'manifest.json'
+    manifest = release_root() / 'archive_ml' / 'manifest.json'
     if not manifest.is_file():
         return snapshots()
     from data.snapshots import load_snapshot
@@ -90,8 +109,8 @@ def snapshots_for_event(context):
         for row in index['snapshots']:
             if row['event_id'] != event_id:
                 continue
-            path = Path(row['path'])
-            if path.is_symlink() or path.resolve().parent != (LOCAL / 'snapshots').resolve() or path.stat().st_size > 50_000_000:
+            path = release_reference(row['path'], 'snapshots')
+            if path.stat().st_size > 50_000_000:
                 raise ValueError('Untrusted snapshot reference')
             snapshot = load_snapshot(path)
             if snapshot.event.event_id != event_id or snapshot.snapshot_id != row['snapshot_id']:
@@ -126,7 +145,7 @@ def bind_saved_cutoff(snapshot, context):
 def artifact_ids(candidate):
     # Listing trusted artifact IDs never executes a joblib payload.
     from ml.artifacts import MODEL_ID
-    return [path.stem for path in local_files(LOCAL / "models", "*.joblib")
+    return [path.stem for path in local_files(release_root() / "models", "*.joblib")
             if MODEL_ID.fullmatch(path.stem) and path.stem.startswith(candidate + "-finishing_position-")]
 
 
@@ -139,7 +158,7 @@ def eligible_artifact_ids(candidate, snapshot):
     eligible = []
     training_dates = {}
     for model_id in ids:
-        path = LOCAL / 'models' / (model_id + '.json')
+        path = release_root() / 'models' / (model_id + '.json')
         if not path.is_file() or path.is_symlink() or path.stat().st_size > 1_000_000:
             if not research:
                 eligible.append(model_id)
@@ -178,7 +197,7 @@ def model_label(value):
 
 
 def event_labels():
-    database = LOCAL / 'f1_2025_2026' / 'f1.sqlite3'
+    database = release_root() / 'f1_2025_2026' / 'f1.sqlite3'
     if not database.is_file():
         return {}
     with sqlite3.connect(database.resolve().as_uri() + '?mode=ro', uri=True) as connection:
@@ -202,7 +221,7 @@ def driver_labels(event_id, snapshot=None):
             name = entry.get('display_name') or entry.get('full_name') or entry.get('driver_name')
             if name:
                 labels[entry['driver_id']] = name
-    directory = LOCAL / 'f1_2025_2026'
+    directory = release_root() / 'f1_2025_2026'
     if (directory / 'f1.sqlite3').is_file():
         from data.archive.reader import ArchiveReader
         reader = ArchiveReader(directory)
@@ -239,7 +258,7 @@ def generate(context, snapshot, model_id, artifact_id=None):
         from ml.artifacts import ArtifactStore
         if artifact_id not in eligible_artifact_ids(model_id, snapshot):
             raise ValueError("Choose an eligible trusted local model artifact.")
-        artifact = ArtifactStore(LOCAL / "models").load(artifact_id)
+        artifact = ArtifactStore(release_root() / "models").load(artifact_id)
     request = PredictionRequest(EventKey(context["season"], context["round_number"]),
                                 context["mode"], context["cutoff"])
     schedule = snapshot.payloads.get("schedule")
@@ -279,7 +298,7 @@ def foundation_receipts(snapshot,candidate):
         return []
     from flows.foundation_prediction import load_receipt
     records=[]
-    for path in (LOCAL/'foundation_models'/'predictions').glob('*.json'):
+    for path in (release_root()/'foundation_models'/'predictions').glob('*.json'):
         if not re.fullmatch('[0-9a-f]{64}',path.stem):continue
         try:
             value=load_receipt(path,snapshot,candidate)
@@ -347,9 +366,8 @@ def local_identity():
 
 def current_study():
     try:
-        pointer=json.loads((LOCAL/'archive_ml'/'active_study.json').read_text(encoding='utf-8'))
-        directory=Path(pointer['path']).resolve()
-        if not directory.is_relative_to((LOCAL/'model_studies').resolve()):raise ValueError('untrusted active study')
+        pointer=json.loads((release_root()/'archive_ml'/'active_study.json').read_text(encoding='utf-8'))
+        directory=release_reference(pointer['path'], 'model_studies')
         path=directory/'report.json'
         if path.is_symlink() or path.stat().st_size>8_000_000:raise ValueError('invalid study file')
         raw=path.read_bytes()
@@ -366,7 +384,7 @@ def evaluations():
     records=[]
     active_study=current_study()
     if active_study:records.append(('Current active model comparison',active_study[1]))
-    for path in local_files(LOCAL / 'evaluations','evaluation-*.json')[:64]:
+    for path in local_files(release_root() / 'evaluations','evaluation-*.json')[:64]:
         if path.stat().st_size>2_000_000:continue
         try:
             payload=json.loads(path.read_text(encoding='utf-8'))
@@ -375,7 +393,7 @@ def evaluations():
         except (ValueError,OSError):continue
     active = {}
     try:
-        active = json.loads((LOCAL / 'archive_ml' / 'benchmark.json').read_text(encoding='utf-8'))
+        active = json.loads((release_root() / 'archive_ml' / 'benchmark.json').read_text(encoding='utf-8'))
     except (OSError, ValueError, TypeError):
         pass
     return sorted(records, key=lambda row: (
@@ -389,11 +407,11 @@ def model_studies():
     active=current_study()
     if active:return [active]
     try:
-        cohort = json.loads((LOCAL/'archive_ml'/'manifest.json').read_text(encoding='utf-8'))['cohort_sha256']
+        cohort = json.loads((release_root()/'archive_ml'/'manifest.json').read_text(encoding='utf-8'))['cohort_sha256']
     except (OSError, ValueError, KeyError):
         return []
     records = []
-    paths = sorted((LOCAL/'model_studies').glob('*/report.json'), key=lambda p:p.stat().st_mtime, reverse=True)
+    paths = sorted((release_root()/'model_studies').glob('*/report.json'), key=lambda p:p.stat().st_mtime, reverse=True)
     for path in paths[:16]:
         if not re.fullmatch('[0-9a-f]{64}', path.parent.name) or path.stat().st_size > 8_000_000:
             continue
@@ -408,7 +426,7 @@ def model_studies():
 
 def study_race(study_id,event_id):
     if not re.fullmatch('[0-9a-f]{64}',study_id):raise ValueError('invalid study identity')
-    folder=LOCAL/'model_studies'/study_id
+    folder=release_root()/'model_studies'/study_id
     report=json.loads((folder/'report.json').read_text(encoding='utf-8'))
     if event_id not in report.get('races',{}):
         if event_id==report['case_study']['event_id']:return report['case_study']
@@ -436,10 +454,10 @@ def chat_service(snapshot=None):
 
 
 def archive_context():
-    directory = LOCAL / 'f1_2025_2026'
+    directory = release_root() / 'f1_2025_2026'
     if not (directory / 'f1.sqlite3').is_file():
         return None
     from data.archive.reader import ArchiveReader
     from data.archive.event_context import EventContextStore
     from agents.archive_context import ArchiveContext
-    return ArchiveContext(ArchiveReader(directory), EventContextStore(LOCAL / 'event_context' / 'context.sqlite3'))
+    return ArchiveContext(ArchiveReader(directory), EventContextStore(release_root() / 'event_context' / 'context.sqlite3'))

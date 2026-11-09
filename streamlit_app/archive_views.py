@@ -48,8 +48,8 @@ def load(context):
         data = {**data, 'entries': participant_entries(data)}
         data['results'] = data['results'][data['results'].driver_id.isin(data['entries'].driver_id)].copy()
         return data
-    except (OSError, ValueError, sqlite3.Error) as error:
-        st.error(f'The saved session could not be read: {error}')
+    except (OSError, ValueError, sqlite3.Error):
+        st.error('The saved session could not be read. Try a different session.')
         return None
 
 
@@ -271,8 +271,8 @@ def telemetry(context, data, selected):
     try:
         car = archive.dense(str(archive.root().resolve()), context['archive_session_id'],
                             context['archive_version_id'], 'car', (driver,))
-    except (OSError, ValueError) as error:
-        st.error(f'Telemetry could not be loaded: {error}')
+    except (OSError, ValueError):
+        st.error('Telemetry could not be loaded for the selected driver.')
         return
     unaligned = car_clock_unavailable(car, data['meta'])
     lap = eligible[eligible.lap_number == number].iloc[0]

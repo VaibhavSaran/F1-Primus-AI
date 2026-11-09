@@ -1,4 +1,5 @@
 """PRIMUS F1: a native shell for the saved telemetry workspace."""
+import os
 import sys
 from pathlib import Path
 
@@ -12,8 +13,12 @@ from streamlit_app.screens import ROUTES
 from streamlit_app.components.context import render_context
 
 st.set_page_config(page_title="PRIMUS F1", page_icon="🏁", layout="wide")
-# Private workspace records must never become public by changing a listen flag.
-if st.get_option("server.address") not in {"localhost", "127.0.0.1", "::1"}:
+archive_preview = os.environ.get("F1_ACCESS_MODE") == "private_archive_preview"
+if archive_preview and not os.environ.get("F1_SERVING_RELEASE_ROOT"):
+    st.error("The archive preview requires a configured serving release.")
+    st.stop()
+# The archive preview is deployed with Cloud Run IAM and serves only archive views.
+if not archive_preview and st.get_option("server.address") not in {"localhost", "127.0.0.1", "::1"}:
     st.error("This private workspace requires verified access before using a non-loopback server binding.")
     st.stop()
 with st.sidebar:
@@ -22,6 +27,12 @@ with st.sidebar:
 
 pages = {}
 for group, label, slug, render in ROUTES:
+    if archive_preview:
+        if slug in {"overview", "compare", "replay", "weather", "about"}:
+            pages.setdefault(group, []).append(st.Page(
+                render, title=label, url_path=slug, default=slug == "overview"
+            ))
+        continue
     if slug == 'ask':
         pages.setdefault('Home', []).append(st.Page(render,title=label,url_path='home',default=True))
         pages['Home'].append(st.Page(render,title='Primus AI direct link',url_path='ask',visibility='hidden'))
@@ -34,7 +45,7 @@ for key in ('season', 'round_number', 'session'):
         st.session_state[key] = st.session_state[key]
 # Keep shared selectors in the entrypoint so their values survive page navigation.
 st.session_state['_page_heading_area'] = st.container()
-if page.url_path in {'','ask'}:
+if not archive_preview and page.url_path in {'','ask'}:
     with st.expander('Additional context',expanded=False):
         bound=st.checkbox('Bind this question to a race',value=False,key='chat_bind_context')
         if bound:

@@ -1,6 +1,8 @@
 # Curated Kaggle dataset release guide
 
-This is a publication design, not an uploaded dataset. The canonical local
+This guide describes the yearly F1 publication design. The weather-only dataset
+has been published; see [release status](release-status.md). The yearly F1
+packages remain local. The canonical local
 archive stays unchanged. Publication requires a reviewed export, appropriate
 redistribution rights and the owner's explicit upload action. This code repository
 is not the dataset and must not contain downloaded telemetry or model weights.

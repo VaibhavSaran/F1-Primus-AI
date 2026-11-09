@@ -1,5 +1,33 @@
 # Data tracker
 
+## November 8, 2026 refresh
+
+Mexico City and Sao Paulo each have all five sessions published, including both
+Grand Prix races. Renewed local authentication resolved the initial HTTP 401.
+The 2026 archive has 100/100 eligible sessions, with 89 complete and 11 partial
+under the required-channel checks. Across 2020–2026, the new cohort pins 749
+sessions. Sao Paulo's race retains four parser-generated car samples for Rafael
+Camara alongside 36,146 timestamped samples. The partial flag is preserved.
+Measured session weather is present for every collected weekend session.
+
+Independent Mexico weather is complete with 57 hourly observations for the
+window ending November 2 at 01:00 UTC. Sao Paulo ERA5 remains pending until
+November 14 UTC under the collector's publication delay policy. The public
+weather Kaggle dataset now contains 8,660 rows across 150 event windows. A
+downloaded CSV matches the staged hash and Mexico row count.
+
+The 2026 notebooks now use November 8 as their inclusive cutoff, bounded by
+the actual execution time and session completion margins. The hosted F1 archive
+uses the verified November 8 release. Mexico classification and Sao Paulo
+classification, replay playback and weather were checked through the custom
+domain. F1 Kaggle Version 3 is published. Its selected-year index, 2026 manifest,
+catalogue and a Sao Paulo position file were downloaded and verified against
+local hashes. The catalogue has 100 sessions, with both races present, and
+passes SQLite integrity and foreign-key checks. Verification completed November 9.
+See [GCP update instructions](gcp-updates.md).
+
+## Previous full archive audit
+
 Checked (UTC): 2026-11-02T16:14:19.667556+00:00
 2026 scope: race weekends through **2026-11-02 inclusive**.
 

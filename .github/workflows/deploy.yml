@@ -1,67 +1,58 @@
-name: Deploy to Cloud Run
+name: Deploy personal GCP application
 
 on:
-  push:
-    branches:
-      - main
+  workflow_run:
+    workflows: [Verify ver_2]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-personal-gcp
+  cancel-in-progress: false
 
 env:
-  PROJECT_ID:   ${{ secrets.GCP_PROJECT_ID }}
-  REGION:       us-central1
-  SERVICE_NAME: f1-primus-ai
-  IMAGE: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/f1-primus-ai/f1-primus-ai
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  ZONE: us-central1-a
+  INSTANCE: primus-personal
 
 jobs:
   deploy:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
-
+    timeout-minutes: 30
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          persist-credentials: false
+      - uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-
-      - name: Configure Docker for GCR
-        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
-
-      - name: Build Docker image
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Build and publish immutable application image
+        shell: bash
         run: |
-          docker build \
-            -f docker/Dockerfile.app \
-            -t $IMAGE:$GITHUB_SHA \
-            -t $IMAGE:latest \
-            .
-
-      - name: Push Docker image
+          set -euo pipefail
+          IMAGE="us-central1-docker.pkg.dev/$PROJECT_ID/f1-primus-ai/f1-primus-ai"
+          COMMIT=$(git rev-parse HEAD)
+          gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+          docker build -f docker/Dockerfile.app -t "$IMAGE:$COMMIT" .
+          docker push "$IMAGE:$COMMIT"
+          DIGEST=$(gcloud artifacts docker images describe "$IMAGE:$COMMIT" --format='value(image_summary.digest)')
+          [[ "$DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
+          echo "DEPLOY_IMAGE=$IMAGE@$DIGEST" >> "$GITHUB_ENV"
+      - name: Deploy through IAP with health check and rollback
+        shell: bash
         run: |
-          docker push $IMAGE:$GITHUB_SHA
-          docker push $IMAGE:latest
-
-      - name: Deploy to Cloud Run
-        run: |
-          gcloud run deploy $SERVICE_NAME \
-            --image $IMAGE:latest \
-            --platform managed \
-            --region $REGION \
-            --allow-unauthenticated \
-            --port 8501 \
-            --memory 2Gi \
-            --cpu 2 \
-            --timeout 3600 \
-            --min-instances 1 \
-            --set-env-vars "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}" \
-            --set-env-vars "TAVILY_API_KEY=${{ secrets.TAVILY_API_KEY }}" \
-            --set-env-vars "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" \
-            --set-env-vars "MLFLOW_TRACKING_URI=http://localhost:5001"
-
-      - name: Show service URL
-        run: |
-          gcloud run services describe $SERVICE_NAME \
-            --region $REGION \
-            --format "value(status.url)"
+          set -euo pipefail
+          gcloud compute scp deploy/personal-vm.sh "$INSTANCE:/tmp/primus-deploy.sh" --project="$PROJECT_ID" --zone="$ZONE" --tunnel-through-iap --quiet
+          gcloud compute ssh "$INSTANCE" --project="$PROJECT_ID" --zone="$ZONE" --tunnel-through-iap --quiet --command="sudo bash /tmp/primus-deploy.sh '$DEPLOY_IMAGE'"

@@ -20,7 +20,13 @@ Start with the [walkthrough](project-walkthrough.md) for the complete user journ
 | Settings & Data | [Inventory, coverage and readiness](features/settings-data.md) |
 | About | [Getting started, page guide and credits](features/about-credits.md) |
 
-Each guide and the walkthrough include completed Spain 2020/United States 2025 examples and Mexico 2026 examples. Mexico's race is dated 1 November: only FP1/FP2/FP3/Q are published in the documented local snapshot, R collection failed, and eight prepared model forecasts for 22 drivers remain unscored. These are snapshot-specific facts, not actual Race results or a complete-2026 claim.
+Each guide includes completed Spain 2020/United States 2025 examples and Mexico
+2026 examples. Some feature-guide examples describe the earlier November 2
+collection checkpoint. The updated walkthrough and data tracker reflect the
+November 8 release, which includes all Mexico and Sao Paulo sessions. Saved
+pre-race forecasts retain their original cutoffs and require explicit outcome
+scoring. The hosted Mexico prepared snapshot exposes saved TabFM and XGBoost
+runs. Other candidates depend on their eligible fitted artifacts and inputs.
 
 ## Data and collection
 
@@ -30,7 +36,8 @@ Each guide and the walkthrough include completed Spain 2020/United States 2025 e
 - [Quality and recovery](data-quality-recovery.md): local repair versus provider gaps.
 - [Event context](event-context.md): outcomes, incidents and availability.
 - [Dataset exporter](dataset-release.md): implemented curated release structure and validation.
-- [Kaggle release design](kaggle-release.md): year-based packaging/data cards; no upload implied.
+- [Kaggle release design](kaggle-release.md): year-based packaging/data cards.
+- [Release status and remaining work](release-status.md): published weather, local F1 packages and outstanding milestones.
 - [New-race update plan](new-race-update-plan.md): proposed lifecycle; no installed scheduler implied.
 
 ## Models, evaluation and assistant

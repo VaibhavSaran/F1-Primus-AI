@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from datetime import date, datetime, timezone
 from hashlib import sha256
 import json
@@ -163,7 +163,7 @@ def _catalogue(f1_root, weather_root, context_root, target, sessions, weather, y
     versions = [s['version_id'] for s in sessions]
     marks = ','.join('?' for _ in versions) or 'NULL'
     counts = {}
-    with _read_db(Path(f1_root) / 'f1.sqlite3') as source, sqlite3.connect(target) as output:
+    with _read_db(Path(f1_root) / 'f1.sqlite3') as source, closing(sqlite3.connect(target)) as output:
         for session in sessions:
             row = source.execute('SELECT session_id,status FROM session_versions WHERE version_id=?',
                                  (session['version_id'],)).fetchone()
@@ -268,7 +268,7 @@ def _documents(root, year, summary):
 
 Status: PREPARED LOCALLY, NOT PUBLISHED. Redistribution rights and Kaggle owner,
 slug, licence and visibility require review. No blanket data licence is assigned.
-{"In-progress 2026 season; event-date scope through November 2, 2026 America/Chicago. Mexico race and weather are pending in the pinned cohort." if year == 2026 else "Historical season; indexed sessions can still have partial telemetry."}
+{f"In-progress 2026 season; event-date scope through {summary['data_through']} America/Chicago. See quality.json for pending sessions and weather." if year == 2026 else "Historical season; indexed sessions can still have partial telemetry."}
 
 Open catalogue.sqlite with Python sqlite3 (no project code needed). It contains
 events/scheduled sessions, version-pinned entries/results/laps, derived v_stints
@@ -345,7 +345,7 @@ cause becomes a fact. Local archive paths, source URLs, author details and raw
 payloads were removed from context. Original source record hashes are not claimed
 to hash this transformed projection. No credentials or private notebook outputs.
 ''', encoding='utf-8')
-    _json(root / 'dataset-metadata.template.json', {'title': f'Primus F1 {year} — Sessions, Telemetry and Weather' + (' — in progress through 2026-11-02' if year == 2026 else ''),
+    _json(root / 'dataset-metadata.template.json', {'title': f'Primus F1 {year} — Sessions, Telemetry and Weather' + (f" — in progress through {summary['data_through']}" if year == 2026 else ''),
         'id': 'REVIEW_REQUIRED_OWNER/REVIEW_REQUIRED_SLUG', 'licenses': [],
         'description': 'Local preparation only. Rights, licence, owner and visibility unresolved; do not upload this template.',
         'keywords': ['formula-one', 'telemetry', 'weather']})
@@ -363,7 +363,8 @@ to hash this transformed projection. No credentials or private notebook outputs.
 
 def build_year_release(f1_root, weather_root, output_root, year, through_date='2026-11-02',
                        release_version='v1-local', *, cohort_path=None, context_root=None):
-    if year not in range(2020, 2027) or date.fromisoformat(through_date) != date(2026, 11, 2):
+    from .notebook_audit import NOT_HELD
+    if year not in range(2020, 2027) or date.fromisoformat(through_date).year != 2026:
         raise ValueError('Unsupported year/cutoff')
     if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,63}', release_version):
         raise ValueError('Unsafe release version')
@@ -417,13 +418,16 @@ def build_year_release(f1_root, weather_root, output_root, year, through_date='2
         'required_channel_status', 'quality_flags', 'strict_review_subset') if k in s} for s in sessions],
         'weather': [{k: w[k] for k in ('event_id', 'status', 'series_id', 'observation_count', 'window_start', 'window_end') if k in w} for w in weather],
         'identity_policy': 'Only processed source-attributed car/positions are exported. Raw/unmapped streams excluded; no automatic reassignment. Published partial flags retained.',
-        'pending': ['2026:19:R', 'weather:2026:19'] if year == 2026 else []}
+        'pending': ['weather:' + w['event_id'] for w in weather if w['status'] != 'complete']}
     with _read_db(staging / 'catalogue.sqlite') as catalog:
         # The calendar includes future/cancelled slots; a missing publication does
         # not imply an acquisition failure or that the scheduled session was held.
         quality['calendar_sessions_without_publication'] = [dict(r) for r in catalog.execute(
             'SELECT s.session_id,s.status,e.local_race_date FROM sessions s JOIN events e USING(event_id) '
             'LEFT JOIN session_versions v USING(session_id) WHERE v.version_id IS NULL ORDER BY s.session_id')]
+        quality['pending'].extend(row['session_id'] for row in quality['calendar_sessions_without_publication']
+                                  if row['local_race_date'] and row['local_race_date'] <= through_date
+                                  and row['session_id'] not in NOT_HELD)
         schema = {r[0]: [dict(x) for x in catalog.execute(f'PRAGMA table_info("{r[0]}")')]
                   for r in catalog.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")}
         sources = [dict(r) for r in catalog.execute('SELECT * FROM source_objects ORDER BY source_id')]
@@ -566,14 +570,16 @@ def build_release_index(output_root):
     """Cross-year metadata only; never mutates the completed yearly releases."""
     from .notebook_audit import NOT_HELD
     output_root = Path(output_root).absolute()
-    index = {'state': 'prepared_local_not_published', 'cohort_id': COHORT,
+    index = {'state': 'prepared_local_not_published', 'cohort_id': None,
              'rights_review': 'required', 'datasets': [], 'known_cancelled_sessions': []}
     for manifest_path in sorted(output_root.glob('f1-*/*/manifest.json')):
         if manifest_path.parent.name.startswith('.'):
             continue
         manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
         summary = manifest['summary']
+        lineage = json.loads((manifest_path.parent / 'source_versions.json').read_text(encoding='utf-8'))
         index['datasets'].append({'year': summary['year'], 'release_version': manifest['release_version'],
+            'cohort_id': lineage['cohort_id'],
             'path': manifest_path.parent.relative_to(output_root).as_posix(),
             'manifest_sha256': _hash(manifest_path), 'summary': summary,
             'package_bytes': sum(p.stat().st_size for p in manifest_path.parent.rglob('*') if p.is_file()),
@@ -584,6 +590,9 @@ def build_release_index(output_root):
             index['datasets'][-1]['context_availability'] = {
                 'path': sidecar.relative_to(output_root).as_posix(), 'sha256': _hash(sidecar),
                 'known_at_basis': 'local_context_store_knowledge_time_not_event_date'}
+    index['cohort_ids'] = sorted({item['cohort_id'] for item in index['datasets']})
+    if len(index['cohort_ids']) == 1:
+        index['cohort_id'] = index['cohort_ids'][0]
     for session_id, (reason, source_url) in sorted(NOT_HELD.items()):
         index['known_cancelled_sessions'].append({'session_id': session_id, 'status': 'not_held',
                                                   'reason': reason, 'source_url': source_url})
@@ -607,8 +616,8 @@ Missing availability is unknown; do not infer historical knowledge from results.
 Known cancelled sessions and their references are listed separately in the index.
 Original calendar status may remain scheduled; curated_context cancellation records
 state not-held evidence. A missing publication is not a claim of acquisition failure.
-2026 is an in-progress release scoped through November 2, 2026 America/Chicago;
-Mexico race and independent weekend weather are pending in the frozen input cohort.
+2026 is in progress. Each indexed summary declares its data-through date;
+each package's quality.json records pending sessions and independent weather.
 Each yearly README/dictionary explains clocks, joins, flags and the offline notebook.
 ''', encoding='utf-8')
     return index

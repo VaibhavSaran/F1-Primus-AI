@@ -135,8 +135,8 @@ def render_replay(context):
                 sources = [archive.replay(str(archive.root().resolve()), context['archive_session_id'],
                                            context['archive_version_id'], tuple(drivers))]
             rejected = 0
-        except (OSError, ValueError) as error:
-            st.error(f'The recorded replay could not be loaded: {error}')
+        except (OSError, ValueError):
+            st.error('The recorded replay could not be loaded for this session.')
             return
         st.caption('Select any driver or the full grid. Markers follow recorded positions and disappear when observations are more than five seconds old.')
     else:

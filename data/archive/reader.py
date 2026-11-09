@@ -2,6 +2,7 @@
 
 from contextlib import contextmanager
 from hashlib import sha256
+import os
 from pathlib import Path
 import sqlite3
 
@@ -61,6 +62,11 @@ class ArchiveReader:
     def __init__(self, root):
         self.root = Path(root).resolve()
         self.db_path = self.root / 'f1.sqlite3'
+        # Hosted releases may place the local catalogue and mounted telemetry separately.
+        mounted_parquet = os.environ.get('F1_SERVING_PARQUET_ROOT')
+        self.parquet_root = Path(mounted_parquet or self.root / 'parquet').resolve()
+        if not mounted_parquet and not self.parquet_root.is_relative_to(self.root):
+            raise ValueError('Archive telemetry is outside the archive root')
 
     @contextmanager
     def _connect(self):
@@ -134,10 +140,13 @@ class ArchiveReader:
             [name for name in columns if name != 'session_time_s'] + ['driver_id', 'session_clock_ns', 'timestamp_utc_ns']))
         frames = []
         for item in files:
-            path = (self.root / item['relative_path']).resolve()
-            version_root = (self.root / 'parquet' / version).resolve()
-            if (Path(version).name != version or version_root.parent != (self.root / 'parquet').resolve()
-                    or not version_root.is_relative_to(self.root) or not path.is_relative_to(version_root)
+            relative = Path(item['relative_path'])
+            version_root = (self.parquet_root / version).resolve()
+            if relative.parts[:2] != ('parquet', version) or relative.anchor:
+                raise ValueError('Unsafe archive parquet path')
+            path = (self.parquet_root / Path(*relative.parts[1:])).resolve()
+            if (Path(version).name != version or version_root.parent != self.parquet_root
+                    or not path.is_relative_to(version_root)
                     or not path.is_file() or path.suffix != '.parquet'):
                 raise ValueError('Untrusted archive Parquet path')
             digest = sha256()

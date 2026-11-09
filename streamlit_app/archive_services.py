@@ -5,7 +5,7 @@ from streamlit_app import services
 
 
 def root():
-    return services.LOCAL / 'f1_2025_2026'
+    return services.release_root() / 'f1_2025_2026'
 
 
 @st.cache_data(show_spinner=False, max_entries=8)

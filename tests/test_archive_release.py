@@ -12,6 +12,17 @@ from data.archive.release import (checked_path, write_bundle, safe_source,
     validate_release, build_year_release, build_release_index, write_context_availability)
 
 
+def test_release_readme_uses_selected_2026_cutoff(tmp_path):
+    from data.archive.release import _documents
+    _documents(tmp_path, 2026, {'data_through': '2026-11-08', 'sessions': 100,
+                              'strict_review_sessions': 80})
+    text = (tmp_path / 'README.md').read_text(encoding='utf-8')
+    assert '2026-11-08' in text
+    assert 'Mexico race and weather are pending' not in text
+    metadata = json.loads((tmp_path / 'dataset-metadata.template.json').read_text(encoding='utf-8'))
+    assert '2026-11-08' in metadata['title']
+
+
 def test_paths_reject_traversal_and_links(tmp_path):
     (tmp_path / 'ok').mkdir()
     assert checked_path(tmp_path, 'ok/a.parquet') == tmp_path / 'ok/a.parquet'
@@ -52,6 +63,19 @@ def test_source_allowlist_drops_credentials_paths_and_urls():
                         'raw_path': 'private', 'canonical_url': 'https://host/?token=secret',
                         'headers': {'authorization': 'secret'}}) == {
                             'source_id': 's', 'provider': 'p', 'payload_sha256': 'h'}
+
+
+def test_release_index_reports_each_actual_cohort(tmp_path):
+    for year, cohort in ((2025, 'old'), (2026, 'new')):
+        root = tmp_path / f'f1-{year}' / 'v1'
+        root.mkdir(parents=True)
+        (root / 'manifest.json').write_text(json.dumps({
+            'summary': {'year': year}, 'release_version': 'v1'}))
+        (root / 'source_versions.json').write_text(json.dumps({'cohort_id': cohort}))
+    index = build_release_index(tmp_path)
+    assert index['cohort_id'] is None
+    assert index['cohort_ids'] == ['new', 'old']
+    assert [item['cohort_id'] for item in index['datasets']] == ['old', 'new']
 
 
 def test_validation_detects_changed_payload(tmp_path):

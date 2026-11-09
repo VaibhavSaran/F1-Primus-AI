@@ -2,7 +2,7 @@ name: Verify ver_2
 
 on:
   push:
-    branches: [ver_2]
+    branches: [ver_2, main]
   pull_request:
     branches: [ver_2, main]
   workflow_dispatch:
