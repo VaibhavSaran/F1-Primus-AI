@@ -30,6 +30,35 @@ def test_legacy_ask_path_remains_available():
     assert not app.exception and app.title[0].value=='Primus AI'
 
 
+def test_chat_forecast_attachment_has_readable_labels(monkeypatch):
+    from types import SimpleNamespace
+    from streamlit_app import screens
+    monkeypatch.setattr(screens,'context',lambda:dict(season=2026,round_number=19,session='Q'))
+    monkeypatch.setattr(screens,'archive_profile_panel',lambda *_:None)
+    monkeypatch.setattr(screens,'choose_snapshot',lambda *_:None)
+    run=dict(run_id='forecast-internal-id',event_id='2026:19',model_id='qualifying',
+             as_of_utc='2026-11-01T15:33:00+00:00')
+    monkeypatch.setattr(screens,'tracking',lambda:SimpleNamespace(forecasts=lambda:[run]))
+    monkeypatch.setattr(services,'event_labels',lambda:{'2026:19':'Mexico City Grand Prix · 2026'})
+    monkeypatch.setattr(services,'driver_labels',lambda *_:{})
+    monkeypatch.setattr(services,'chat_service',lambda *_:SimpleNamespace(provider=None))
+    def example():
+        import streamlit as st
+        from streamlit_app.screens import ask_f1
+        st.session_state['chat_bind_context']=True
+        ask_f1()
+    app=AppTest.from_function(example).run()
+    assert not app.exception
+    field=app.selectbox(key='chat_attached_run')
+    assert field.options[0]=='No forecast attached'
+    assert 'Mexico City Grand Prix' in field.options[1]
+    assert 'Qualifying baseline' in field.options[1]
+    assert '01 Nov 2026 15:33 UTC' in field.options[1]
+    assert 'forecast-internal-id' not in field.options[1]
+    field.select('forecast-internal-id').run()
+    assert not app.exception and app.session_state['chat_attached_run']=='forecast-internal-id'
+
+
 def test_about_has_credits_without_requiring_a_race():
     app=AppTest.from_file('streamlit_app/app.py');app._page_hash=md5(b'about').hexdigest()
     app.run(timeout=20)

@@ -745,8 +745,11 @@ def ask_f1():
             queries=tracking()
             event_id=f"{selected['season']}:{selected['round_number']}"
             runs=[r for r in queries.forecasts() if r['event_id']==event_id] if queries else []
+            races=services.event_labels()
+            run_labels={r['run_id']:f"{races.get(r['event_id'],r['event_id'])} · {services.model_label(r['model_id'])} · {services.datetime_from_metadata(r['as_of_utc']):%d %b %Y %H:%M} UTC" for r in runs}
             run_id=st.selectbox('Attach saved forecast',[None,*[r['run_id'] for r in runs]],
-                format_func=lambda value:value or 'No forecast attached',key='chat_attached_run')
+                format_func=lambda value:run_labels[value] if value else 'No forecast attached',key='chat_attached_run',
+                help='Optional: discuss an existing model result for this race. This does not run a new forecast.')
             entries=snapshot.payloads.get('entries',()) if snapshot else ()
             if not entries and selected.get('archive_session_id'):
                 from streamlit_app import archive_services

@@ -6,7 +6,16 @@ Primus AI is the home page and the F1 question-answering interface. The default 
 
 Ask a question and inspect its evidence. **Internal data** identifies saved local records; linked web citations identify retrieved sources. Expand **Additional context** to bind a race/session, attach a saved snapshot or forecast, or focus a driver. Binding is optional. Explicit questions that contradict a binding should be refined or unbound rather than silently answered for another race.
 
-Web-backed answers distinguish **Official statements**, **Media reporting** and
+Answers default to short conversational paragraphs, with official and media
+attribution woven into the explanation. Lists are used when the request needs
+them. Previously saved messages retain their original wording.
+
+**Saved input snapshot** selects stored inputs and their cutoff, not a newly
+generated forecast. **Attach saved forecast** optionally binds an existing model
+result; its label shows race, model and input cutoff in UTC instead of an internal
+record ID. Leave **No forecast attached** selected for ordinary F1 questions.
+
+Web-backed answers distinguish official statements, media reporting and
 **Primus analysis** when applicable. Source links identify official publishers
 versus trusted media. A news article is not automatically called a press release.
 For example, ask “What does Pirelli say causes tyre graining?” or “How does
