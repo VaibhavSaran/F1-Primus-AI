@@ -1,11 +1,25 @@
 # Updating the personal GCP deployment
 
-The custom domain uses the IAP protected `primus-domain-gateway` Cloud Run
+The custom domain uses the publicly accessible `primus-domain-gateway` Cloud Run
 service, which forwards to the application on Compute Engine `primus-personal`
 in `us-central1-a`. The application reads its serving release from persistent
 disk at `/srv/primus/release`. Mutable conversations and tracking records live
 at `/srv/primus/state`. Application updates use the existing root owned launcher
 at `/srv/primus/run.sh`, which retrieves the Anthropic key from Secret Manager.
+
+Since November 10, visitor access requires no Google sign-in. IAP is disabled
+on the gateway only; administrative SSH still uses IAP tunnels. The VM and
+storage bucket remain private. Production images set `F1_PUBLIC_DEMO=1`,
+which creates server-generated visitor identities and isolates conversation
+history. Since November 13, anonymous chat allows twenty requests/minute and
+two hundred/day per session, with twenty concurrent jobs globally and shared
+AI spending caps of $30/day and $100/month. Admission still requires enough
+remaining budget for the conservative $3 request reservation; completed calls
+settle to measured token/search usage. Global spending caps can reject a request
+before its session allowance is exhausted. Daily/monthly windows use UTC.
+Opening another browser session does not reset those global spending caps.
+Visitor identities are session-scoped; closing a session can lose access to its
+saved conversation, so download Markdown before leaving.
 
 ## Application changes
 

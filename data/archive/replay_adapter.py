@@ -91,6 +91,7 @@ def build_replay(reader, session_id: str, driver_ids=None) -> ReplaySession:
                          tyre_age_laps=_number(row.get('tyre_age_laps')), stint=_number(row.get('stint_number')),
                          accurate=_boolean(row.get('provider_is_accurate')), deleted=_boolean(row.get('deleted')),
                          pit_in=None, pit_out=None, track_status=None))
+    excluded_markers = 0
     for table, text_column in [('race_control', 'message_text'), ('track_status', 'message_raw')]:
         for row in tables.get(table, pd.DataFrame()).to_dict('records'):
             clock = _seconds(row.get('session_clock_ns'))
@@ -98,6 +99,9 @@ def build_replay(reader, session_id: str, driver_ids=None) -> ReplaySession:
             if table == 'track_status':
                 message = f"Track: {message or 'status changed'}"
             if clock is not None and clock >= 0 and message:
+                if clock > 86400:
+                    excluded_markers += 1
+                    continue
                 messages.append({'session_time_s': clock, 'message': message[:2048]})
     dense = reader.dense(session_id, 'positions', driver_ids=selected)
     positions = []
@@ -125,6 +129,8 @@ def build_replay(reader, session_id: str, driver_ids=None) -> ReplaySession:
              'clock_origin_original_fastf1_t0_includes_pre_session']
     if excluded:
         flags.append(f'excluded_laps_without_monotonic_positive_end_clock:{excluded}')
+    if excluded_markers:
+        flags.append(f'excluded_markers_outside_replay_clock:{excluded_markers}')
     weather = []
     for row in tables.get('weather', pd.DataFrame()).to_dict('records'):
         clock = _seconds(row.get('session_clock_ns'))

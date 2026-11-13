@@ -5,7 +5,8 @@ Primus F1 combines recorded-session analysis, pre-race research and sourced F1 a
 ## Start locally
 
 For the hosted demonstration, open [Primus F1](https://f1primus.vaibhavsaran.com/)
-and sign in with the owner's Google account. The following local startup
+directly; no sign-in is required. Each visitor has a separate session identity
+for conversations, while shared AI spending limits apply. The following local startup
 instructions are useful when demonstrating the source checkout.
 
 From the repository root, use the project environment:
@@ -184,7 +185,7 @@ Getting started gives a usage sequence and completed/pending examples. Page guid
 
 **Example 2 — Mexico:** explain how the hosted project combines recorded race
 evidence with saved pre-race rankings. Credit the data providers and reference
-projects, then describe the IAP gateway, VM, persistent archive and session reads.
+projects, then describe the public Cloud Run gateway, private VM, persistent archive and session reads. IAP remains in use for administrative SSH, not visitor sign-in.
 
 Read [About and credits](features/about-credits.md).
 

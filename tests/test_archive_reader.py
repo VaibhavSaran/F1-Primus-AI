@@ -46,6 +46,15 @@ def test_missing_reader_never_initializes(tmp_path):
     assert not root.exists()
 
 
+def test_provider_placeholder_name_uses_recorded_broadcast_name(saved):
+    archive, _, _, _ = saved
+    with archive.connect() as db:
+        db.execute("UPDATE drivers SET display_name='None None' WHERE driver_id='a'")
+        db.execute("UPDATE session_entries SET broadcast_name='A DRIVER' WHERE driver_id='a'")
+    entries = ArchiveReader(archive.root).tables('2025:1:FP1')['entries']
+    assert entries.iloc[0]['display_name'] == 'A DRIVER'
+
+
 def test_rich_published_version_selected_consistently(saved):
     archive, source, rows, version = saved
     sparse = {**rows, 'laps': [{'driver_id': 'a', 'lap_number': 1, 'lap_time_ns': 91_000_000_000}]}

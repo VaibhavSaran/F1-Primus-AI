@@ -53,6 +53,27 @@ def test_citation_destination_validation(url):
     assert vetted_url(url) is None
 
 
+def test_trusted_media_search_has_distinct_source_labels():
+    client=Client([reply([{'type':'text','text':'Autosport reports this development.',
+        'citations':[{'url':'https://www.autosport.com/f1/news/test-report/',
+                      'title':'F1 report','cited_text':'Reported development'}]}])])
+    result=ClaudeProvider(client=client).answer('What are F1 media reporting?',context={},conversation=(),
+        execute=lambda *a:None,checkpoint=lambda **kw:None)
+    assert result['status']=='answered'
+    assert result['citations'][0]['source_type']=='media'
+    assert 'autosport.com' in client.calls[0]['tools'][-1]['allowed_domains']
+    assert vetted_url('https://autosport.com.evil.test/report') is None
+
+
+def test_official_citation_is_not_automatically_called_a_press_release():
+    client=Client([reply([{'type':'text','text':'Official F1 coverage.',
+        'citations':[{'url':'https://www.formula1.com/en/latest/article/test',
+                      'title':'Official coverage','cited_text':'Recorded fact'}]}])])
+    result=ClaudeProvider(client=client).answer('F1 official coverage?',context={},conversation=(),
+        execute=lambda *a:None,checkpoint=lambda **kw:None)
+    assert result['citations'][0]['source_type']=='official'
+
+
 def test_uncited_current_fact_fails_closed():
     client=Client([reply([{'type':'text','text':'The latest regulation changed today.'}])])
     result=ClaudeProvider(client=client).answer('Latest F1 regulation?',context={},conversation=(),execute=lambda *a:None,checkpoint=lambda **kw:None)
@@ -86,6 +107,15 @@ def test_tyre_mechanism_search_uses_supplier_primary_sources():
     ClaudeProvider(client=client).answer('F1 graining versus blistering?',context={},conversation=(),
         execute=lambda *a:None,checkpoint=lambda **kw:None)
     assert client.calls[0]['tools'][-1]['allowed_domains']==['pirelli.com']
+
+
+def test_search_excludes_domains_blocked_by_provider_crawler():
+    client=Client([reply([{'type':'text','text':'No verified evidence.'}])])
+    ClaudeProvider(client=client).answer('F1 regulations news?',context={},conversation=(),
+        execute=lambda *a:None,checkpoint=lambda **kw:None)
+    domains=client.calls[0]['tools'][-1]['allowed_domains']
+    assert 'autosport.com' in domains
+    assert 'bbc.com' not in domains and 'bbc.co.uk' not in domains
 
 
 def test_missing_local_citation_gets_one_bounded_repair_not_false_abstention():

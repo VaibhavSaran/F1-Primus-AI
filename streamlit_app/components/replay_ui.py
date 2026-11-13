@@ -156,6 +156,8 @@ def render_replay(context):
                                 format_func=lambda value: next(f'Saved {item.source["fetched_at_utc"][:10]}'
                                     for item in sources if item.frame_version == value))
     session = sources[source_ids.index(selected)]
+    if any(flag.startswith('excluded_markers_outside_replay_clock:') for flag in session.quality_flags):
+        st.warning('Some race-control messages have inconsistent provider timestamps and are omitted. Recorded laps and positions remain available.')
     labels = {entry['driver_id']: labels.get(entry['driver_id']) or entry.get('display_name') or entry['abbreviation'] or 'Unknown driver' for entry in session.entries}
     current = st.session_state.get('replay_commit', {})
     if current.get('session_id') != session.identity or current.get('frame_version') != session.frame_version:

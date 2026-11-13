@@ -1,8 +1,10 @@
 # Primus AI evaluation and guardrails
 
-Primus is currently deterministic, grounded local Q&A. It has no external LLM,
-URL fetcher, arbitrary SQL, code executor, shell, write tool or autonomous forecast
-submission. A paid/generative provider is not required to run this evaluation.
+This evaluation targets the deterministic, grounded local Q&A path. The hosted
+application additionally uses Claude with bounded cited web search; live provider
+tests are separate. Neither path exposes arbitrary SQL, a code executor, shell,
+write tools or autonomous forecast submission. A paid provider is not required
+to run the deterministic evaluation below.
 
 Run from the repository root with the project environment:
 
@@ -72,10 +74,34 @@ archive/context reads are read-only. No provider or inference API is called.
 This is a finite regression evaluation, not proof that every possible jailbreak
 or factual error is impossible. Keyword filtering is defense in depth; the
 read-only allowlist, absence of generative execution and trusted identity/ledger
-boundaries provide the stronger protection. A future external LLM integration
-must be separately evaluated with multi-turn/tool-output attacks and independent
-factual checks before exposure. Correctness here means agreement with saved
+boundaries provide the stronger protection. The deployed external LLM has a
+separate provider evaluation described in [primus-provider.md](primus-provider.md);
+multi-turn/tool-output attacks and independent factual checks remain necessary
+as the model and tools change. Correctness in this offline suite means agreement with saved
 source data; it does not independently establish provider accuracy or perfect
 source coverage. Unsupported F1 concepts can still receive an honest insufficient
-evidence response. This is local resume-project tooling, not an audited public
-production deployment.
+evidence response. These tests do not constitute a public security audit.
+
+## November 13 hosted chat verification
+
+- 115 focused tests passed across chat routing, provider citations, public identity,
+  chat history and rate/spending limits using `primusEnv`.
+- Five sequential hosted service probes passed: coding-problem refusal,
+  instruction-override refusal, unrelated recipe refusal, a cited official
+  Pirelli explanation and cited Motorsport.com reporting.
+- Both paid replies completed for the same visitor without the former second-request
+  budget rejection. Their measured costs were $0.052720 and $0.068060; these are
+  examples rather than a general cost forecast.
+- The hosted Streamlit browser also completed consecutive media and official-source
+  questions in one conversation, displayed their distinct citation labels, and
+  refused an F1-wrapped Python coding request.
+- Official and media citations retain separate source categories. A native
+  citation is evidence to inspect, not a guarantee that every claim is correct.
+- During testing, BBC crawler restrictions caused an HTTP 400 request rejection.
+  Both BBC domains were removed from the search allowlist; the corrected live
+  official and media searches succeeded.
+
+The hosted shared caps are $30/day and $100/month. Conservative $3 per-request
+reservations remain in place; unknown bills are retained for operator
+reconciliation instead of silently resetting usage. No credentials are included
+in evaluation reports.

@@ -782,7 +782,8 @@ def ask_f1():
                     url=vetted_url(citation.get('url'))
                     if url:
                         label=citation.get('title') or 'Web source'
-                        st.link_button(f"[{citation.get('id','W')}] {label[:100]}",url)
+                        category='Media reporting' if citation.get('source_type')=='media' else 'Official source'
+                        st.link_button(f"[{citation.get('id','W')}] {category} · {label[:100]}",url)
                 else:
                     local=True
             if local:st.caption('Sources: Internal data')

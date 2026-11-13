@@ -359,9 +359,15 @@ def local_identity():
     import streamlit as st
     from security.access import local_principal
     address=st.get_option('server.address')
+    identity = 'local'
+    if os.environ.get('F1_PUBLIC_DEMO') == '1':
+        from uuid import uuid4
+        if '_visitor_identity' not in st.session_state:
+            st.session_state['_visitor_identity'] = 'visitor-' + uuid4().hex
+        identity = st.session_state['_visitor_identity']
     return local_principal(enabled=os.getenv('F1_ACCESS_MODE','local')=='local',
                            loopback_only=address in {'localhost','127.0.0.1','::1'},
-                           identity='local',role='ai_user')
+                           identity=identity,role='ai_user')
 
 
 def current_study():
@@ -449,6 +455,9 @@ def chat_service(snapshot=None):
     from agents.claude_provider import ClaudeProvider
     provider=ClaudeProvider.from_env()
     policy=LimitPolicy(tools=8,searches=2,deadline_seconds=90,output_tokens=8000,context_tokens=80000) if provider else LimitPolicy()
+    if os.environ.get('F1_PUBLIC_DEMO') == '1' and provider:
+        policy=LimitPolicy(per_minute=20,per_day=200,global_active=20,tools=8,searches=2,
+                           deadline_seconds=90,output_tokens=4000,context_tokens=40000)
     return ChatService(SQLiteLimiter(LOCAL / 'limits.sqlite3',policy=policy),TrackingStore(LOCAL / 'tracking.sqlite3'),
                        history=history,snapshots=(snapshot,) if snapshot else (), archive_context=archive_context(),provider=provider)
 

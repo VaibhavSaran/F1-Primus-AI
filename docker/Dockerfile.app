@@ -18,6 +18,7 @@ RUN grep -v "pywin32" requirements.txt > requirements_linux.txt && \
 # Copy application code
 COPY . .
 ENV PYTHONPATH=/app
+ENV F1_PUBLIC_DEMO=1
 
 # Create necessary directories
 RUN mkdir -p data/reports data/raw data/processed .fastf1_cache .local

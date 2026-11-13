@@ -99,6 +99,13 @@ class ArchiveReader:
             frames['entries'] = _frame(connection.execute(
                 'SELECT e.*,d.display_name FROM session_entries e JOIN drivers d USING(driver_id) '
                 'WHERE e.version_id=? ORDER BY e.driver_id', (version,)))
+            # Some provider rosters contain literal "None None" rather than null.
+            for index, entry in frames['entries'].iterrows():
+                name = entry.get('display_name')
+                if not isinstance(name, str) or not name.strip() or all(
+                        part.casefold() in {'none', 'null', 'nan'} for part in name.split()):
+                    frames['entries'].at[index, 'display_name'] = (
+                        entry.get('broadcast_name') or entry.get('abbreviation') or 'Unknown driver')
             for key, table in {'laps': 'laps', 'results': 'session_results',
                     'track_status': 'track_status_events', 'race_control': 'race_control_messages',
                     'coverage': 'coverage', 'stints': 'v_stints', 'pit_visits': 'v_pit_visits'}.items():

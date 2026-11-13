@@ -1,12 +1,14 @@
 # Release status and remaining work
 
-Data scope through November 8, 2026. Publication verified November 9, 2026,
+Data scope through November 8, 2026. Public-access and data-repair review November 10, 2026;
+Kaggle publication verified November 11, 2026,
 America/Chicago.
 
 ## Hosted application
 
-The private application is available at https://f1primus.vaibhavsaran.com/ with
-Google IAP owner access. The active serving release is `20261108-v1` on the
+The application is available at https://f1primus.vaibhavsaran.com/ without
+visitor sign-in. Public visitor conversations are session-isolated and shared
+AI spending caps remain enforced. The active serving release is `20261110-v1` on the
 persistent disk of `primus-personal`. The old release is retained for rollback.
 The archive reader selects session and driver partitions on demand.
 
@@ -32,22 +34,33 @@ collector retry boundary at November 14 UTC. FastF1 session weather is already
 present for both weekends.
 
 The [Primus F1 Race and Telemetry Dataset](https://www.kaggle.com/datasets/vaibhavsaran/primus-f1-race-and-telemetry-2020-2026)
-has Version 3 published and verified. The 2026 bundle is `v3-20261108`, with
-100 sessions and 59,224 lap records. The web uploader retained 2020–2025 files.
-The downloaded publication index still selects all seven years. The 2026
-manifest, catalogue and a Sao Paulo position file match local hashes. SQLite
-integrity and foreign keys pass, both races are present, and the downloaded
-position sample has 36,132 rows with its pinned version ID. The dataset card
-now describes November 8 coverage and correctly explains that filename numeric
-prefixes are archive indices. Existing licensing settings are preserved.
+has Version 4 published and verified. The 2026 bundle is `v4-20261111`, with
+100 sessions and 59,224 lap records through the November 8 weekend. It includes
+the repaired Mexico Race streams and refreshed Sao Paulo Race. The web uploader
+retained the unchanged 2020–2025 files and existing cover image.
+
+The downloaded manifest, catalogue and publication index match local hashes.
+SQLite integrity and foreign keys pass. Mexico has 132 measured weather
+observations and Sao Paulo has 160. Downloaded Albon position samples match
+their hashes, version IDs and row counts: 23,688 Mexico rows spanning 7,916.341
+seconds, and 36,132 Sao Paulo rows spanning 9,598.001 seconds. The index retains
+all seven years and the earlier six selections are unchanged. The dataset card
+now describes the repairs. Existing licensing settings are preserved.
+
+The standalone weather CSV was downloaded again on November 11 and matches
+the local export exactly. All 150 completed weather task hashes match the
+published provenance. No duplicate weather version was created because no new
+independent weather observations were downloaded.
 
 ## Source and deployment workflow
 
-Local work is on main and remains uncommitted. The edited verification workflow
+The previous main push and GitHub deployment rerun succeeded. New November 10
+replay, public-access and documentation changes are on main and remain uncommitted.
+The verification workflow
 runs on main pushes. Its successful completion triggers immutable image deployment
 to the existing VM through IAP, with health checks and image rollback. Source
-must reach GitHub before this workflow can run. The CI service account's VM
-permissions need verification in the first actual GitHub deployment.
+must reach GitHub before this workflow can run. The CI identity's required VM
+permissions were verified by the successful deployment rerun.
 
 The focused release, weather and notebook suite passed 59 tests. Repository
 hygiene scanning reported zero findings after setup notebook execution outputs
@@ -56,7 +69,7 @@ coverage is recorded in [data-tracker.md](data-tracker.md).
 
 ## Remaining work
 
-- Review, commit and push the local source changes, then verify the first CI deployment.
+- Review, commit and push the November 10 source changes, then check CI deployment.
 - Retry Sao Paulo independent ERA5 after its publication delay.
 - Walk through every page together and practise the interview demonstration.
 - Append genuine Mexico outcomes to the saved prospective forecast evaluation
@@ -64,6 +77,19 @@ coverage is recorded in [data-tracker.md](data-tracker.md).
 
 The 2026 research holdout remains separate from prospective forecast scoring.
 Fresh TabFM inference is an offline operator task. Advanced strategy research,
-optional Jev/ensemble experiments and Kaggle notebook publication remain later
-work. Dataset file-description refinement is on the back burner at the owner's
+optional Jev/ensemble experiments remain later work. The owner completed Kaggle
+example notebook publication. Dataset file-description refinement is on the back burner at the owner's
 request.
+
+The [November 10 quality review](data-quality-2026-11-10.md) documents the stale
+Mexico parser-cache repair and all historical partial/cancelled-session review
+targets. Kaggle Version 4 now includes the local/GCP race repairs; prior Kaggle
+versions remain historical snapshots.
+The November 10 replay/public-mode regression suite passed 67 tests, and the
+repository hygiene scan reported zero findings. The 713,765,222-byte serving
+delta passed upload checksum comparison, all 195 payload SHA-256 checks and
+SQLite integrity/foreign-key checks before activation. Both race timing source
+objects are included so the new replay can retain recorded ranks and gaps.
+The public browser check selected all observed Mexico drivers, verified
+Play/Pause, and sought to one hour into the race with a measured weather
+observation at 00:59:39. The former replay load error did not recur.

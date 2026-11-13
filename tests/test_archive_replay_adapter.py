@@ -24,6 +24,22 @@ class Reader:
                               'x_raw': t, 'y_raw': t * 2} for t in range(10, 1800)])
 
 
+def test_out_of_range_provider_markers_do_not_destroy_usable_replay():
+    reader = Reader()
+    tables = reader.tables('2025:1:FP1')
+    tables['race_control'] = pd.DataFrame([
+        {'session_clock_ns': 100_000_000_000, 'message_text': 'Observed flag'},
+        {'session_clock_ns': 100_000_000_000_000, 'message_text': 'Misaligned clock'},
+    ])
+    reader.tables = lambda _: tables
+    session = build_replay(reader, '2025:1:FP1')
+    assert session.positions and session.timed_laps
+    assert any(m['message'] == 'Observed flag' for m in session.markers)
+    assert not any(m['message'] == 'Misaligned clock' for m in session.markers)
+    assert 'excluded_markers_outside_replay_clock:1' in session.quality_flags
+    assert len(tables['race_control']) == 2
+
+
 def test_original_session_clock_unknown_flags_and_exact_pit_clock():
     replay = build_replay(Reader(), '2025:1:FP1')
     assert replay.positions[0]['clock_ms'] == 1000

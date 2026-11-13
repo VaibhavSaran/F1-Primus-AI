@@ -70,6 +70,9 @@ _UNSAFE = re.compile(r'ignore\s+(all\s+)?(previous|prior|above|system)|system\s+
 _OFF_TOPIC_TASK = re.compile(r'\b(recipe|homework|malware|ransomware|phishing|cryptocurrency|'
     r'stocks?|portfolio|investment|medical|diagnosis|dating|poem|essay)\b|'
     r'\b(?:write|generate|execute|compile)\b.{0,50}\b(?:code|script|program|python|javascript)\b|'
+    r'\b(?:give|provide|produce|debug|fix|refactor|implement)\b.{0,80}\b(?:code|script|program|python|javascript|function)\b|'
+    r'\b(?:solve|complete|implement)\b.{0,80}\b(?:coding|programming|algorithm|leetcode|hackerrank)\b|'
+    r'\b(?:leetcode|hackerrank|codeforces|two sum)\b|'
     r'\b(?:translate|create\s+an?\s+image|draw\s+an?\s+(?:image|picture))\b', re.I)
 
 _RACE_ALIASES = (
@@ -412,7 +415,7 @@ class ChatService:
                 if subject:
                     context['mentioned_driver_id'] = subject
             if _UNSAFE.search(normalized) or _OFF_TOPIC_TASK.search(normalized) or not (_TOPIC.search(normalized) or known_codes or subject):
-                result.update(status='refused', answer='Ask an F1, telemetry, profile or saved-model question. I cannot access secrets, execute code or fetch user URLs.')
+                result.update(status='refused', answer='I can help with Formula 1 races, drivers, telemetry and saved model results. Please keep the request about F1; I do not solve coding problems or unrelated tasks.')
                 actual_cost=0
             elif paid:
                 bound_event=event_id

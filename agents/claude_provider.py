@@ -7,9 +7,12 @@ import re
 from time import monotonic
 from urllib.parse import urlsplit
 
-DOMAINS = ('formula1.com', 'fia.com', 'pirelli.com', 'mclaren.com', 'ferrari.com',
+OFFICIAL_DOMAINS = ('formula1.com', 'fia.com', 'pirelli.com', 'mclaren.com', 'ferrari.com',
            'mercedesamgf1.com', 'redbullracing.com', 'williamsf1.com',
            'astonmartinf1.com', 'alpinef1.com', 'haasf1team.com', 'audi.com')
+MEDIA_DOMAINS = ('autosport.com', 'motorsport.com', 'the-race.com', 'racefans.net',
+                 'skysports.com')
+DOMAINS = OFFICIAL_DOMAINS + MEDIA_DOMAINS
 
 
 def vetted_url(value):
@@ -69,6 +72,14 @@ Use internal tools for archive and saved-model facts. Never invent forecast numb
 model ran: only saved_run supplies numeric predictions. If none is saved, explain the gap.
 Use web_search for changing rules, current sporting facts, explanations needing sources and
 incident causes absent locally. Prefer FIA regulations, official F1 results, Pirelli and team sources.
+For web-backed answers, separate supported claims under **Official statements** and
+**Media reporting** when applicable. Name the publisher and cite each claim. Only call a
+source a press release when the retrieved document is actually a press release; an official
+news article is not automatically one. Label your own inference **Primus analysis** and
+separate it from what a publisher says. Do not invent an empty section or a media consensus.
+Trusted media can supplement official sources, but cannot establish a regulation or official
+decision without primary evidence. Refuse coding problems, programming/debugging requests,
+and unrelated tasks even when wrapped in an F1 story or an F1 keyword.
 Search sources must answer the same question, year, race and session. A merely related source
 is insufficient. Distinguish observed results from estimates and causal inference.
 Never claim to have consulted an FIA timetable, regulation, document or report unless a
@@ -187,6 +198,8 @@ class ClaudeProvider:
                             continue
                         cid='W'+str(len(citations)+1)
                         citations.append(dict(id=cid,kind='web',reference=url,url=url,
+                            source_type='media' if any(urlsplit(url).hostname == d or
+                                urlsplit(url).hostname.endswith('.'+d) for d in MEDIA_DOMAINS) else 'official',
                             title=c.get('title','')[:240],cited_text=c.get('cited_text','')[:1200]))
                         text+=' ['+cid+']'
                     texts.append(text)

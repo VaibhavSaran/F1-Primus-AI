@@ -1,5 +1,31 @@
 # Data tracker
 
+## November 11 Kaggle publication
+
+F1 Kaggle Version 4 is published, using the `v4-20261111` 2026 release. It
+contains the repaired Mexico and refreshed Sao Paulo race streams, with 100
+sessions and 59,224 lap records through November 8. The earlier 2020–2025
+releases are retained. Remote manifest/catalogue/index hashes, SQLite integrity
+and foreign keys, measured weather counts (Mexico 132; Sao Paulo 160), and
+position samples from both races passed verification.
+
+The separate weather dataset is verified unchanged at 8,660 hourly rows across
+150 event windows. Its downloaded CSV and all 150 local source hashes match
+the published release. Sao Paulo ERA5 remains pending until provider availability.
+
+## November 10 review
+
+The [latest quality review](data-quality-2026-11-10.md) supersedes the earlier
+Mexico coverage claim. A fresh-cache download recovered full-duration Mexico
+race streams: 1,103 lap records, 521,136 positions and 132 measured weather
+observations. All 100 eligible 2026 sessions are saved through November 10.
+The [review CSV](data-coverage-review.csv) enumerates partial channels and known
+cancelled practices across all seven seasons. Sao Paulo independent ERA5 is
+still pending; measured session weather is available.
+The refreshed Mexico and Sao Paulo race versions are active on GCP in
+`20261110-v1`; the rest of the serving archive is reused. Kaggle Version 4 now
+also includes this repair.
+
 ## November 8, 2026 refresh
 
 Mexico City and Sao Paulo each have all five sessions published, including both

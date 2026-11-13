@@ -1,6 +1,6 @@
 # Architecture and evidence flow
 
-Primus F1 is a local Streamlit application over a versioned archive, cutoff-bound model inputs and owner-visible saved forecasts. Page rendering reads saved evidence; explicit user chat/forecast submissions use guarded services. Collection, model fitting, large-model inference preparation and historical studies are separate operator workflows. This describes implemented repository boundaries, not a deployed service.
+Primus F1 is a Streamlit application over a versioned archive, cutoff-bound model inputs and saved forecasts. It runs locally and behind a public Cloud Run gateway forwarding to a private Compute Engine VM. Page rendering reads saved evidence; explicit user chat/forecast submissions use guarded services. Public visitors receive separate session identities for conversation history, while shared AI spending caps remain enforced. Collection, model fitting, large-model inference preparation and historical studies are separate operator workflows. See [GCP updates](gcp-updates.md) for the deployed topology.
 
 ## System map
 

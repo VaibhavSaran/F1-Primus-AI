@@ -6,6 +6,18 @@ Primus AI is the home page and the F1 question-answering interface. The default 
 
 Ask a question and inspect its evidence. **Internal data** identifies saved local records; linked web citations identify retrieved sources. Expand **Additional context** to bind a race/session, attach a saved snapshot or forecast, or focus a driver. Binding is optional. Explicit questions that contradict a binding should be refined or unbound rather than silently answered for another race.
 
+Web-backed answers distinguish **Official statements**, **Media reporting** and
+**Primus analysis** when applicable. Source links identify official publishers
+versus trusted media. A news article is not automatically called a press release.
+For example, ask “What does Pirelli say causes tyre graining?” or “How does
+Autosport explain the 2026 F1 regulations?” and inspect the cited source.
+Programming problems and unrelated tasks are refused even if an F1 keyword is
+added. This is a tested guardrail, not a guarantee against every possible attack.
+
+Public chat currently allows 200 requests/day per session, 20/minute and up to
+20 concurrent requests across visitors, subject to shared spending caps of
+$30/day and $100/month. Request budgets settle to measured usage. Resets use UTC.
+
 **New conversation** clears the active browser conversation and starts a separate durable record. Completed turns save automatically. **Reports → Saved conversations** exports Markdown with original times, context and sources. Conversations predating durable saving may be unavailable.
 
 With a configured provider, Claude Sonnet 5.5 uses bounded catalog, archive, saved-run, pending-forecast, evaluation and profile tools, plus cited web search. Sources must support the specific year/event/session and claim. Current web retrieval is not evidence that a fact was available at a historical cutoff. Without a provider, **Local evidence mode** can answer supported saved-evidence questions, but cannot replace generation or live search.
